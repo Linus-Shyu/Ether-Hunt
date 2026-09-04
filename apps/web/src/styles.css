@@ -1,0 +1,256 @@
+:root {
+  --bg: #0c1410;
+  --bg-elevated: #14201a;
+  --ink: #e8f0ea;
+  --muted: #8fa395;
+  --accent: #d4a84b;
+  --accent-2: #3d9b7a;
+  --danger: #e07a5f;
+  --line: rgba(232, 240, 234, 0.12);
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(61, 155, 122, 0.22), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, rgba(212, 168, 75, 0.12), transparent 50%),
+    linear-gradient(180deg, #0c1410 0%, #101a14 100%);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.shell {
+  width: min(920px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 3.5rem 0 5rem;
+}
+
+.hero {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 8vw, 4.75rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.tagline {
+  max-width: 36rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.partners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.partners li {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.scan {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .scan {
+    grid-template-columns: 1fr;
+  }
+}
+
+label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  padding: 0.85rem 1rem;
+}
+
+input[type="text"]:focus {
+  outline: 2px solid rgba(61, 155, 122, 0.45);
+  outline-offset: 1px;
+}
+
+button.primary {
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent-2), #2a7a5e);
+  color: #f4fff9;
+  padding: 0.9rem 1.35rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.status {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.report {
+  margin-top: 2.5rem;
+  display: grid;
+  gap: 1.5rem;
+  animation: rise 0.45s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel {
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 400;
+  margin: 0 0 0.5rem;
+}
+
+.panel p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.meta strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.findings {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.finding {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+}
+
+.finding header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.finding h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.sev {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.sev.high,
+.sev.critical {
+  color: var(--danger);
+}
+
+.finding p {
+  margin: 0.55rem 0 0;
+  font-size: 0.92rem;
+}
+
+.evidence {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.evidence article {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.evidence article:last-child {
+  border-bottom: 0;
+}
+
+.evidence h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.evidence p {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
