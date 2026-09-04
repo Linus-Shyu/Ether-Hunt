@@ -1,0 +1,10 @@
+type ApprovalEvent @entity(immutable: true) {
+  id: ID!
+  token: Bytes!
+  owner: Bytes!
+  spender: Bytes!
+  value: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+}

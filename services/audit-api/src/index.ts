@@ -1,12 +1,19 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { config } from "dotenv";
 import { randomUUID } from "node:crypto";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { isAddressLike, type AuditReport } from "@ether-hunt/shared";
 import { analyzeEvidence, summarizeFindings } from "./analyze.js";
 import { fetchGraphEvidence } from "./graph.js";
 import { paymentGate } from "./payment.js";
+import { fetchRpcApprovalEvidence } from "./rpcEvidence.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, "../../../.env") });
 
 const app = new Hono();
 const port = Number(process.env.PORT ?? 8787);
@@ -23,6 +30,11 @@ app.get("/health", (c) =>
     ok: true,
     service: "ether-hunt-audit-api",
     partners: ["hedera-x402", "the-graph", "arc-agent-stack"],
+    x402: {
+      bypass: process.env.DEV_BYPASS_PAYMENT !== "false",
+      payTo: Boolean(process.env.HEDERA_SERVICE_ACCOUNT_ID),
+      network: process.env.X402_NETWORK ?? "hedera:testnet",
+    },
   }),
 );
 
@@ -44,7 +56,16 @@ app.post("/audit", paymentGate, async (c) => {
   }
 
   const graph = await fetchGraphEvidence(address);
-  const findings = analyzeEvidence(graph.evidence);
+  let evidence = graph.evidence;
+  let graphNote = graph.note;
+
+  if (!graph.live) {
+    const rpc = await fetchRpcApprovalEvidence(address);
+    evidence = [...rpc.evidence, ...graph.evidence];
+    graphNote = `${graph.note} | ${rpc.note}`;
+  }
+
+  const findings = analyzeEvidence(evidence);
   const payment = c.get("payment");
 
   const report: AuditReport = {
@@ -52,15 +73,16 @@ app.post("/audit", paymentGate, async (c) => {
     createdAt: new Date().toISOString(),
     chainId: parsed.data.chainId,
     address: address.toLowerCase(),
-    networkLabel: parsed.data.chainId === 1 ? "Ethereum" : `chain-${parsed.data.chainId}`,
+    networkLabel:
+      parsed.data.chainId === 1 ? "Ethereum" : `chain-${parsed.data.chainId}`,
     summary: summarizeFindings(findings),
     findings,
-    evidence: graph.evidence,
+    evidence,
     sources: {
       graph: {
         live: graph.live,
         endpoint: graph.endpoint,
-        note: graph.note,
+        note: graphNote,
       },
       payment: {
         required: payment.required,
@@ -80,17 +102,17 @@ app.get("/partners", (c) =>
       {
         partner: "Hedera",
         track: "AI & Agentic Payments (x402)",
-        status: "gate stubbed — Blocky402 verify next",
+        status: "402 + facilitator verify wired; need service account for live settle",
       },
       {
         partner: "The Graph",
         track: "Best AI Use Case (From Scratch)",
-        status: "live query when GRAPH_SUBGRAPH_URL set",
+        status: "live when GRAPH_SUBGRAPH_URL set; RPC fallback is not Graph",
       },
       {
         partner: "Arc",
         track: "Agentic Economy / Circle Agent Stack",
-        status: "consumer agent TBD after API settles",
+        status: "agent-consumer package calls /audit",
       },
     ],
   }),

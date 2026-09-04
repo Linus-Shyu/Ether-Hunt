@@ -1,15 +1,16 @@
 import type { EvidenceItem } from "@ether-hunt/shared";
 
-export const APPROVALS_QUERY = `
-query Approvals($id: ID!) {
-  account(id: $id) {
+/** Schema for our Studio subgraph (`ApprovalEvent` entities). */
+export const APPROVAL_EVENTS_QUERY = `
+query ApprovalEvents($owner: Bytes!) {
+  approvalEvents(first: 15, orderBy: value, orderDirection: desc, where: { owner: $owner }) {
     id
-    approvals(first: 10, orderBy: value, orderDirection: desc, where: { value_gt: "0" }) {
-      id
-      value
-      token { id symbol name }
-      spender { id }
-    }
+    token
+    owner
+    spender
+    value
+    timestamp
+    transactionHash
   }
 }
 `;
@@ -22,9 +23,8 @@ export interface GraphFetchResult {
 }
 
 /**
- * Fetches live evidence from a Graph gateway URL.
- * Set GRAPH_SUBGRAPH_URL to a Studio/gateway subgraph HTTP endpoint.
- * Optional GRAPH_API_KEY as Bearer token when the gateway requires it.
+ * Fetches live evidence from a Graph gateway / Studio URL.
+ * Set GRAPH_SUBGRAPH_URL (+ optional GRAPH_API_KEY).
  */
 export async function fetchGraphEvidence(
   address: string,
@@ -35,14 +35,14 @@ export async function fetchGraphEvidence(
   if (!endpoint) {
     return {
       live: false,
-      note: "GRAPH_SUBGRAPH_URL not set — configure Subgraph Studio for prize-eligible live data.",
+      note: "GRAPH_SUBGRAPH_URL not set — deploy subgraphs/token-approvals to Studio for prize-eligible live data.",
       evidence: [
         {
           id: "graph-config-missing",
           kind: "other",
           title: "Graph not configured",
           detail:
-            "No live subgraph endpoint. Set GRAPH_SUBGRAPH_URL (and GRAPH_API_KEY if required) to qualify for The Graph prize.",
+            "No live subgraph endpoint. See subgraphs/token-approvals/README.md.",
         },
       ],
     };
@@ -55,14 +55,14 @@ export async function fetchGraphEvidence(
     headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const id = address.toLowerCase();
+  const owner = address.toLowerCase();
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        query: APPROVALS_QUERY,
-        variables: { id },
+        query: APPROVAL_EVENTS_QUERY,
+        variables: { owner },
       }),
     });
 
@@ -84,15 +84,15 @@ export async function fetchGraphEvidence(
 
     const payload = (await response.json()) as {
       data?: {
-        account?: {
+        approvalEvents?: Array<{
           id: string;
-          approvals?: Array<{
-            id: string;
-            value: string;
-            token?: { id: string; symbol?: string; name?: string };
-            spender?: { id: string };
-          }>;
-        } | null;
+          token: string;
+          owner: string;
+          spender: string;
+          value: string;
+          timestamp?: string;
+          transactionHash?: string;
+        }>;
       };
       errors?: Array<{ message: string }>;
     };
@@ -113,21 +113,18 @@ export async function fetchGraphEvidence(
       };
     }
 
-    const approvals = payload.data?.account?.approvals ?? [];
-    const evidence: EvidenceItem[] = approvals.map((a, index) => {
-      const symbol = a.token?.symbol ?? "token";
-      const spender = a.spender?.id ?? "unknown";
-      const unlimited =
-        a.value.startsWith("0xffffffffffffffffffffffffffffffffffffffff") ||
-        a.value.length >= 70;
+    const rows = payload.data?.approvalEvents ?? [];
+    const evidence: EvidenceItem[] = rows.map((a, index) => {
+      const unlimited = a.value.length >= 70 || a.value.startsWith("115792089");
       return {
         id: a.id || `approval-${index}`,
         kind: "approval",
-        title: unlimited
-          ? `Unlimited ${symbol} approval`
-          : `${symbol} approval`,
-        detail: `Spender ${spender} allowance=${a.value}`,
-        ref: a.id,
+        title: unlimited ? "Unlimited approval (Graph)" : "Approval (Graph)",
+        detail: `token=${a.token} spender=${a.spender} value=${a.value}`,
+        ref: a.transactionHash ?? a.id,
+        occurredAt: a.timestamp
+          ? new Date(Number(a.timestamp) * 1000).toISOString()
+          : undefined,
       };
     });
 
@@ -135,16 +132,15 @@ export async function fetchGraphEvidence(
       evidence.push({
         id: "graph-empty",
         kind: "other",
-        title: "No approvals indexed for account",
-        detail:
-          "Live Graph query succeeded but returned zero approvals for this address (or schema mismatch).",
+        title: "No ApprovalEvent rows",
+        detail: "Live Graph query succeeded but returned zero matching approvals.",
       });
     }
 
     return {
       live: true,
       endpoint,
-      note: `Live Graph query OK (${evidence.length} evidence rows).`,
+      note: `Live Graph query OK (${evidence.length} rows).`,
       evidence,
     };
   } catch (error) {
