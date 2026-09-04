@@ -1,0 +1,50 @@
+---
+description: ETHOnline 2026 official rules, judging, and submission constraints
+alwaysApply: true
+---
+
+# ETHOnline 2026
+
+Source: https://ethglobal.com/events/ethonline2026/info/details  
+Deadline: **Sun Sep 13, 2026 12:00 pm EDT** (no late submissions)
+
+## ETHGlobal hard rules (always enforce)
+
+These are non-negotiable for Ether Hunt. Refuse plans that break them.
+
+1. **Start from scratch (Classic)** — Project work begins after kickoff. Do **not** add features to a pre-existing project codebase. Public libraries / boilerplate / starter kits are allowed; mark them in README.
+2. **Version control required** — All product work lives in git with a readable history.
+3. **Commit frequently** — Prefer many small, incremental commits. **Do not** land sparse history with huge dumps (e.g. one or few commits that contain large changes). Never suggest a single end-of-day mega-commit on GitHub.
+4. **Open source + public repo** — The GitHub repository must stay **public** so anyone can verify the work.
+5. **Demo video ≤ 4 minutes** — Keep the submission video within the allowed window (2–4 min). **Do not** speed up the video to fit; sped-up submissions are disqualified (manually verified).
+
+## Track
+
+Ether Hunt is **Classic (From Scratch)** unless the user explicitly switches. Continuity rules do not apply.
+
+## Hard compliance (every change)
+
+- Only reuse public OSS / official boilerplates; list reused vs new in README.
+- AI (Cursor included) assists; it must not be the entire project. Document tools, files/areas, and human contribution.
+- If using spec-driven workflows (OpenSpec, Kiro, spec-kit, etc.), keep specs, prompts, and planning artifacts in the repo.
+- Optimize for a working demo over unfinished breadth.
+
+## Judging priorities
+
+Design for: **Technicality → Originality → Practicality → Usability (UI/UX/DX) → WOW**. Prefer real on-chain / protocol integrations over mock-only slides.
+
+Async note: first round screens (~top 20% to live Finalist). Partner prizes are separate—materials must stand alone for async reviewers.
+
+## Submission artifacts (required)
+
+- Public GitHub repo + setup instructions (repo remains public)
+- Distinguish new vs reused / boilerplate
+- Figma or equivalent if UI was designed
+- **Demo video REQUIRED**: 2–4 min, ≥720p, no phone recording, no music+text-only narration, no TTS/AI voiceover, **no speed-up**
+- Partner prizes: up to **3** (locked: Hedera x402 · The Graph AI From Scratch · Arc Agent Stack). See `ethonline-2026-prizes.mdc`. **No product code before 2026-09-04 kickoff.**
+
+## When coding
+
+- Secure Web3 defaults: no hardcoded secrets; validate inputs; careful approvals; explicit network/config.
+- README: idea, how to run, architecture, AI usage, reused code, partner integrations, payment flow.
+- Before “done”: runs locally; demo ≤4 min without speeding up; commit history is frequent and incremental.
