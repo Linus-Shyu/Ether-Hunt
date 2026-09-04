@@ -31,6 +31,13 @@ export interface Finding {
   evidenceIds: string[];
 }
 
+export interface AuditAiLayer {
+  enabled: boolean;
+  model?: string;
+  narrative: string;
+  note: string;
+}
+
 export interface AuditRequest {
   chainId: number;
   address: string;
@@ -47,6 +54,7 @@ export interface AuditReport {
   summary: string;
   findings: Finding[];
   evidence: EvidenceItem[];
+  ai?: AuditAiLayer;
   sources: {
     graph: {
       live: boolean;
@@ -56,7 +64,7 @@ export interface AuditReport {
     payment: {
       required: boolean;
       settled: boolean;
-      rail: "hedera-x402" | "dev-bypass" | "none";
+      rail: "hedera-x402" | "arc-gateway" | "dev-bypass" | "none";
       note: string;
     };
   };

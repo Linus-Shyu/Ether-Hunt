@@ -3,6 +3,8 @@ node_modules/
 apps/*/node_modules/
 services/*/node_modules/
 packages/*/node_modules/
+subgraphs/*/node_modules/
+subgraphs/*/generated/
 .pnpm-store/
 .yarn/
 vendor/
@@ -38,3 +40,6 @@ Thumbs.db
 *.log
 tmp/
 .temp/
+
+# TypeScript
+*.tsbuildinfo
