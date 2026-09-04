@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+services/*/node_modules/
+packages/*/node_modules/
+.pnpm-store/
+.yarn/
+vendor/
+
+# Build / cache
+dist/
+build/
+out/
+.next/
+.turbo/
+cache/
+coverage/
+typechain-types/
+artifacts/
+cache_forge/
+broadcast/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / local
+*.log
+tmp/
+.temp/

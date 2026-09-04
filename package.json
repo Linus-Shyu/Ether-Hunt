@@ -1,0 +1,21 @@
+{
+  "name": "ether-hunt",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ether Hunt — AI on-chain audit (ETHOnline 2026 Classic)",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @ether-hunt/audit-api & npm run dev -w @ether-hunt/web",
+    "dev:api": "npm run dev -w @ether-hunt/audit-api",
+    "dev:web": "npm run dev -w @ether-hunt/web",
+    "build": "npm run build -w @ether-hunt/shared && npm run build -w @ether-hunt/audit-api && npm run build -w @ether-hunt/web",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
