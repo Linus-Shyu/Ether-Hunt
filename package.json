@@ -13,6 +13,7 @@
     "dev:api": "npm run dev -w @ether-hunt/audit-api",
     "dev:web": "npm run dev -w @ether-hunt/web",
     "agent:scan": "npm run scan -w @ether-hunt/agent-consumer",
+    "agent:arc": "npm run arc -w @ether-hunt/agent-consumer",
     "build": "npm run typecheck --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

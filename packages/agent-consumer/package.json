@@ -3,12 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./hedera": "./src/lib/hederaPaidScan.ts",
+    "./arc": "./src/lib/arcPaidScan.ts"
+  },
   "scripts": {
     "scan": "tsx src/scan.ts",
+    "arc": "tsx src/arc-scan.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@ether-hunt/shared": "*",
+    "@x402/fetch": "^2.25.0",
+    "@x402/hedera": "^2.2.1",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
