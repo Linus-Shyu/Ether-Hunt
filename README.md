@@ -59,7 +59,12 @@ See `docs/ai-attribution.md`.
 
 - [x] Partner lock + monorepo scaffold
 - [x] UI → API audit path (dev payment bypass)
-- [ ] Live Graph endpoint wired with Studio key
-- [ ] Real Blocky402 x402 settle
-- [ ] Arc agent consumer
-- [ ] Public GitHub + frequent commits
+- [x] x402 402 + facilitator verify path (needs Hedera account for live)
+- [x] Agent consumer stub (`npm run agent:scan`)
+- [x] Approvals subgraph package for Studio deploy
+- [ ] Live Graph Studio URL in `.env` (**needs your deploy key**)
+- [ ] Real Blocky402 settle with funded wallets (**needs Hedera keys**)
+- [ ] Arc Agent Stack wallet wiring (**needs Circle/Arc creds**)
+- [ ] Public GitHub remote
+
+See `docs/NEED-FROM-YOU.md` for secrets/auth blockers.
