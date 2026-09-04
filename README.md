@@ -1,70 +1,98 @@
 # Ether Hunt
 
 ETHOnline 2026 · Classic (From Scratch) · **Sep 4–16, 2026**  
-Submit by **Sep 13, 2026 12:00 EDT**
+Submit by **Sep 13, 2026 12:00 EDT**  
+Repo: public GitHub · Partner seats: **Hedera x402 · The Graph AI From Scratch · Arc Agent Stack**
 
 ## Idea
 
-**Pay-per-scan AI on-chain audit** with evidence you can verify:
+**Pay-per-scan on-chain audit** where every claim is backed by live chain evidence:
 
-1. **The Graph** — live subgraph evidence (approvals → more detectors next)
-2. **AI / rules** — grounded findings (citations required)
-3. **Hedera x402** — paywall the audit API (Blocky402)
-4. **Arc Agent Stack** — agent consumer that pays and calls the service
+1. **The Graph** — From-Scratch Studio subgraph (`ApprovalEvent`) as the evidence source of truth  
+2. **AI** — Graph-grounded synthesis that may only cite real evidence IDs (no invented txs)  
+3. **Hedera x402** — ExactHederaScheme paywall via Blocky402 testnet  
+4. **Arc Agent Stack** — Circle agent wallet pays Gateway nanopayments to `/audit/arc`
 
 ## Locked partners (max 3)
 
-| Partner | Track |
-| --- | --- |
-| Hedera | AI & Agentic Payments (x402) |
-| The Graph | Best AI Use Case (**From Scratch**) |
-| Arc | Best Agentic Economy / Circle Agent Stack |
+| Partner | Track | Proof in product |
+| --- | --- | --- |
+| Hedera | AI & Agentic Payments (x402) | `POST /audit` + `npm run agent:scan` |
+| The Graph | Best AI Use Case (**From Scratch**) | Studio subgraph + `ai` narrative/findings |
+| Arc | Best Agentic Economy / Circle Agent Stack | `POST /audit/arc` + `npm run agent:arc` |
+
+Judge packs: `docs/prize-checklist.md` · `docs/demo-script.md` · `docs/ai-attribution.md`
 
 ## Run locally
 
 ```bash
 cd "Ether Hunt"
 npm install
-npm run build -w @ether-hunt/shared  # optional typecheck
 npm run dev:api   # http://127.0.0.1:8787
-npm run dev:web   # http://127.0.0.1:5173
+npm run dev:web   # http://localhost:5173
 ```
 
-Env: copy `.env.example`. For Graph prize eligibility set `GRAPH_SUBGRAPH_URL` (+ `GRAPH_API_KEY` if needed).  
-`DEV_BYPASS_PAYMENT=true` is for local only — **not** for Hedera prize demos.
+Copy `.env.example` → `.env`. Set `GRAPH_SUBGRAPH_URL` and LLM key (`ANTHROPIC_API_KEY`) for the AI path.
+
+- `DEV_BYPASS_PAYMENT=true` — local UI only  
+- Prize payment demos require `DEV_BYPASS_PAYMENT=false`
+
+**Web one-click pay:** pick rail in the UI → `POST /scan/hedera` or `POST /scan/arc` (server agent wallets settle; gated `/audit` stays prize-valid).
+
+Paid agents (CLI):
+
+```bash
+npm run agent:scan   # Hedera x402 → POST /audit
+npm run agent:arc    # Circle Agent Stack → POST /audit/arc
+```
+
+Dense Graph demo address: `0x0218033bc4c88e91a6cc9a6aceee421dda39448d`
+
+## Architecture (short)
+
+```
+UI / Hedera agent / Arc agent
+        │
+        ▼
+ audit-api  ── Graph Studio subgraph (live ApprovalEvent)
+        │      + rule detectors
+        │      + LLM synthesis (cite-only)
+        ▼
+   AuditReport (findings + evidence + ai)
+```
+
+Payments:
+
+- Hedera rail: `@x402/hedera` ExactScheme → Blocky402 testnet facilitator  
+- Arc rail: `@circle-fin/x402-batching` GatewayEvmScheme → Circle Gateway testnet + `circle services pay`
 
 ## Layout
 
 ```
-apps/web              Vite + React UI
-services/audit-api    Hono API (payment gate + Graph + analysis)
-packages/shared       Shared report types
-docs/                 Decisions, prize architecture, official links
-.cursor/rules/        ETHOnline compliance rules
+apps/web                 Vite + React scan UI
+services/audit-api       Hono API (dual payment + Graph + AI)
+packages/agent-consumer  Hedera + Arc paying agents
+packages/shared          Report types
+subgraphs/token-approvals Studio subgraph (From Scratch)
+docs/                    Prize / demo / decisions
 ```
 
 ## Reused vs new
 
-| Reused / planned boilerplate | New |
+| Reused | New |
 | --- | --- |
-| Hedera x402 official PoC patterns (upcoming) | Product UX, report schema, detectors |
-| Circle Agent Stack starter (upcoming) | Audit orchestration |
-| Public subgraph schemas | Finding synthesis + citations |
+| `@x402/hono`, `@x402/hedera`, Hedera PoC patterns | Audit product, report schema, detectors |
+| `@circle-fin/x402-batching`, Circle CLI Agent Stack | `/audit/arc` Gateway gate + `agent:arc` |
+| graph-cli / graph-ts | `ether-hunt-approvals` subgraph + grounded AI path |
 
 ## AI usage
 
-See `docs/ai-attribution.md`.
+See `docs/ai-attribution.md`. AI assists; humans own prize selection, credentials, demo, and compliance.
 
-## Status (kickoff day)
+## Status
 
-- [x] Partner lock + monorepo scaffold
-- [x] UI → API audit path (dev payment bypass)
-- [x] x402 402 + facilitator verify path (needs Hedera account for live)
-- [x] Agent consumer stub (`npm run agent:scan`)
-- [x] Approvals subgraph package for Studio deploy
-- [ ] Live Graph Studio URL in `.env` (**needs your deploy key**)
-- [ ] Real Blocky402 settle with funded wallets (**needs Hedera keys**)
-- [ ] Arc Agent Stack wallet wiring (**needs Circle/Arc creds**)
-- [ ] Public GitHub remote
-
-See `docs/NEED-FROM-YOU.md` for secrets/auth blockers.
+- [x] Hedera x402 live settle  
+- [x] Graph Studio live URL + denser findings  
+- [x] Arc Agent Stack Gateway pay  
+- [x] Graph-grounded LLM synthesis  
+- [ ] Submission demo video (≤4 min, no speed-up)

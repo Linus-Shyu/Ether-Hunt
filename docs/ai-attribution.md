@@ -2,12 +2,15 @@
 
 | Area / files | Tool | Human contribution |
 | --- | --- | --- |
-| Monorepo scaffold, audit-api, web UI | Cursor (Composer) | Product decisions, partner selection, review, prize compliance |
-| Hedera x402 / Blocky402 integration | TBD | Will adapt official PoC; mark reused lines in README |
-| The Graph queries | Cursor assist | Schema choice, live endpoint config, detector design |
-| Arc Agent Stack consumer | TBD | Agent payment path after API settles |
+| Monorepo scaffold, audit-api, web UI | Cursor | Product decisions, partner lock, review, prize compliance |
+| `services/audit-api/src/payment.ts` Hedera x402 | Cursor + official PoC patterns | Account setup, Blocky402 wiring, live settle verification |
+| `services/audit-api/src/payment-arc.ts` Circle Gateway | Cursor + `@circle-fin/x402-batching` | Arc Agent Stack buyer path via Circle CLI |
+| `subgraphs/token-approvals` | Cursor | Schema choice, Studio deploy, live URL |
+| `services/audit-api/src/synthesize.ts` Graph-grounded LLM | Cursor | Prompt constraints (cite-only), prize narrative |
+| Detectors / UX copy | Cursor + human | Severity taxonomy, known spender labels, demo script |
 
 Notes:
 
 - AI assists; it is not the entire project.
-- Keep this table updated each day of the hackathon.
+- LLM output is rejected unless `evidenceIds` exist in the live Graph/RPC evidence set.
+- Keep this table updated through submission.
