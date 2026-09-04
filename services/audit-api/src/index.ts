@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { config } from "dotenv";
 import { randomUUID } from "node:crypto";
@@ -9,14 +10,21 @@ import { z } from "zod";
 import { isAddressLike, type AuditReport } from "@ether-hunt/shared";
 import { analyzeEvidence, summarizeFindings } from "./analyze.js";
 import { fetchGraphEvidence } from "./graph.js";
-import { paymentGate } from "./payment.js";
-import { fetchRpcApprovalEvidence } from "./rpcEvidence.js";
+import { hederaPaidScan } from "@ether-hunt/agent-consumer/hedera";
+import { arcPaidScan } from "@ether-hunt/agent-consumer/arc";
+import { createPaymentMiddleware } from "./payment.js";
+import { createArcPaymentMiddleware } from "./payment-arc.js";
+import { fetchRpcApprovalEvidence, fetchAddressProfile } from "./rpcEvidence.js";
+import { synthesizeWithAi } from "./synthesize.js";
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
 
 const app = new Hono();
 const port = Number(process.env.PORT ?? 8787);
+const paymentGate = createPaymentMiddleware();
+const arcPaymentGate = createArcPaymentMiddleware();
 
 app.use(
   "*",
@@ -34,6 +42,35 @@ app.get("/health", (c) =>
       bypass: process.env.DEV_BYPASS_PAYMENT !== "false",
       payTo: Boolean(process.env.HEDERA_SERVICE_ACCOUNT_ID),
       network: process.env.X402_NETWORK ?? "hedera:testnet",
+      hederaScheme: true,
+      hederaBuyer: Boolean(
+        process.env.HEDERA_AGENT_ACCOUNT_ID &&
+          process.env.HEDERA_AGENT_PRIVATE_KEY,
+      ),
+      arcGateway: Boolean(
+        process.env.ARC_SERVICE_ADDRESS || process.env.ARC_AGENT_ADDRESS,
+      ),
+      arcPayTo:
+        process.env.ARC_SERVICE_ADDRESS || process.env.ARC_AGENT_ADDRESS || null,
+      webPay: {
+        hedera: "/scan/hedera",
+        arc: "/scan/arc",
+        local: "/scan/local",
+      },
+    },
+    ai: {
+      configured: Boolean(
+        process.env.DEEPSEEK_API_KEY?.trim() ||
+          process.env.ANTHROPIC_API_KEY?.trim() ||
+          process.env.OPENAI_API_KEY?.trim(),
+      ),
+      provider: process.env.DEEPSEEK_API_KEY?.trim()
+        ? "deepseek"
+        : process.env.OPENAI_API_KEY?.trim()
+          ? "openai"
+          : process.env.ANTHROPIC_API_KEY?.trim()
+            ? "anthropic"
+            : "none",
     },
   }),
 );
@@ -43,7 +80,7 @@ const auditBody = z.object({
   address: z.string().min(1),
 });
 
-app.post("/audit", paymentGate, async (c) => {
+async function runAudit(c: Context) {
   const json = await c.req.json().catch(() => null);
   const parsed = auditBody.safeParse(json);
   if (!parsed.success) {
@@ -56,16 +93,30 @@ app.post("/audit", paymentGate, async (c) => {
   }
 
   const graph = await fetchGraphEvidence(address);
-  let evidence = graph.evidence;
-  let graphNote = graph.note;
+  const profile = await fetchAddressProfile(address);
+  const rpc = await fetchRpcApprovalEvidence(address);
 
-  if (!graph.live) {
-    const rpc = await fetchRpcApprovalEvidence(address);
-    evidence = [...rpc.evidence, ...graph.evidence];
-    graphNote = `${graph.note} | ${rpc.note}`;
-  }
+  const graphHasSubjectApprovals = graph.evidence.some(
+    (e) => e.kind === "approval" && !/network context/i.test(e.title),
+  );
+  const rpcUseful = rpc.evidence.filter(
+    (e) => e.id !== "rpc-empty" || !graphHasSubjectApprovals,
+  );
 
-  const findings = analyzeEvidence(evidence);
+  // Always keep live Graph evidence first (prize source), then profile + RPC supplement.
+  const evidence = [...graph.evidence, ...profile, ...rpcUseful];
+  const graphNote = graphHasSubjectApprovals
+    ? `${graph.note} | RPC supplement skipped empty window`
+    : `${graph.note} | ${rpc.note}`;
+
+  const ruleFindings = analyzeEvidence(evidence);
+  const ai = await synthesizeWithAi({
+    address: address.toLowerCase(),
+    evidence,
+    ruleFindings,
+    graphLive: graph.live,
+  });
+  const findings = [...ruleFindings, ...ai.findings];
   const payment = c.get("payment");
 
   const report: AuditReport = {
@@ -75,9 +126,17 @@ app.post("/audit", paymentGate, async (c) => {
     address: address.toLowerCase(),
     networkLabel:
       parsed.data.chainId === 1 ? "Ethereum" : `chain-${parsed.data.chainId}`,
-    summary: summarizeFindings(findings),
+    summary: ai.enabled
+      ? `${summarizeFindings(findings)} · AI grounded on live Graph.`
+      : summarizeFindings(findings),
     findings,
     evidence,
+    ai: {
+      enabled: ai.enabled,
+      model: ai.model,
+      narrative: ai.narrative,
+      note: ai.note,
+    },
     sources: {
       graph: {
         live: graph.live,
@@ -94,6 +153,92 @@ app.post("/audit", paymentGate, async (c) => {
   };
 
   return c.json(report);
+}
+
+app.post("/audit", paymentGate, runAudit);
+app.post("/audit/arc", arcPaymentGate, runAudit);
+
+/** Unpaid UI path — never counts as Hedera/Arc prize settle. */
+app.post("/scan/local", async (c) => {
+  c.set("payment", {
+    required: false,
+    settled: true,
+    rail: "dev-bypass",
+    note: "Local UI scan — unpaid; use Hedera/Arc rails for prize demos.",
+  });
+  return runAudit(c);
+});
+
+/**
+ * Browser one-click buyers: server-side agent wallets settle real x402,
+ * then return the audit report. Gated endpoints stay prize-valid.
+ */
+app.post("/scan/hedera", async (c) => {
+  const json = await c.req.json().catch(() => null);
+  const parsed = auditBody.safeParse(json);
+  if (!parsed.success) {
+    return c.json({ error: "invalid_body", details: parsed.error.flatten() }, 400);
+  }
+  const address = parsed.data.address.trim();
+  if (!isAddressLike(address)) {
+    return c.json({ error: "invalid_address" }, 400);
+  }
+
+  const port = Number(process.env.PORT ?? 8787);
+  const apiUrl =
+    process.env.AUDIT_API_URL?.trim() || `http://127.0.0.1:${port}`;
+
+  try {
+    const { status, body } = await hederaPaidScan({
+      apiUrl,
+      address,
+      chainId: parsed.data.chainId,
+    });
+    if (status >= 200 && status < 300) return c.json(body);
+    return c.json(body, status as 400);
+  } catch (err) {
+    return c.json(
+      {
+        error: "hedera_pay_failed",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      502,
+    );
+  }
+});
+
+app.post("/scan/arc", async (c) => {
+  const json = await c.req.json().catch(() => null);
+  const parsed = auditBody.safeParse(json);
+  if (!parsed.success) {
+    return c.json({ error: "invalid_body", details: parsed.error.flatten() }, 400);
+  }
+  const address = parsed.data.address.trim();
+  if (!isAddressLike(address)) {
+    return c.json({ error: "invalid_address" }, 400);
+  }
+
+  const port = Number(process.env.PORT ?? 8787);
+  const apiUrl =
+    process.env.AUDIT_API_URL?.trim() || `http://127.0.0.1:${port}`;
+
+  try {
+    const { status, body } = await arcPaidScan({
+      apiUrl,
+      address,
+      chainId: parsed.data.chainId,
+    });
+    if (status >= 200 && status < 300) return c.json(body);
+    return c.json(body, status as 400);
+  } catch (err) {
+    return c.json(
+      {
+        error: "arc_pay_failed",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      502,
+    );
+  }
 });
 
 app.get("/partners", (c) =>
@@ -102,7 +247,8 @@ app.get("/partners", (c) =>
       {
         partner: "Hedera",
         track: "AI & Agentic Payments (x402)",
-        status: "402 + facilitator verify wired; need service account for live settle",
+        status:
+          "ExactHederaScheme + Blocky402; POST /audit with Hedera agent signer",
       },
       {
         partner: "The Graph",
@@ -112,7 +258,8 @@ app.get("/partners", (c) =>
       {
         partner: "Arc",
         track: "Agentic Economy / Circle Agent Stack",
-        status: "agent-consumer package calls /audit",
+        status:
+          "POST /audit/arc via Circle Gateway + `circle services pay --chain ARC-TESTNET`",
       },
     ],
   }),
