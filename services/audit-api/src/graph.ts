@@ -1,7 +1,81 @@
 import type { EvidenceItem } from "@ether-hunt/shared";
 import { fetchJson } from "./http.js";
+import { describeAddress } from "./spenders.js";
 
-/** Owner-scoped approvals from our Studio subgraph. */
+/**
+ * Allowance state as folded by the subgraph mapping (schema >= v0.0.2).
+ *
+ * This is the query we want: the index already knows which allowances are still
+ * live, how concentrated each spender is, and how often a pair was re-approved,
+ * so the API never replays event history to work that out.
+ */
+export const ALLOWANCE_STATE_QUERY = `
+query AllowanceState($account: ID!) {
+  account(id: $account) {
+    id
+    approvalCount
+    unlimitedGrantCount
+    liveUnlimitedCount
+    revokeCount
+    distinctSpenderPairs
+    firstSeen
+    lastSeen
+    allowances(first: 25, orderBy: lastSeen, orderDirection: desc) {
+      id
+      token
+      currentValue
+      peakValue
+      unlimited
+      revoked
+      approvalCount
+      revokeCount
+      firstSeen
+      lastSeen
+      lastTransactionHash
+      spender {
+        id
+        liveUnlimitedCount
+        unlimitedReceivedCount
+        distinctOwnerPairs
+      }
+    }
+  }
+  spender(id: $account) {
+    id
+    approvalCount
+    unlimitedReceivedCount
+    liveUnlimitedCount
+    distinctOwnerPairs
+    firstSeen
+    lastSeen
+    allowancesReceived(first: 10, orderBy: lastSeen, orderDirection: desc) {
+      id
+      token
+      currentValue
+      peakValue
+      unlimited
+      revoked
+      lastSeen
+      lastTransactionHash
+      owner { id }
+    }
+  }
+  concentratedSpenders: spenders(
+    first: 8
+    orderBy: liveUnlimitedCount
+    orderDirection: desc
+    where: { liveUnlimitedCount_gt: 0 }
+  ) {
+    id
+    liveUnlimitedCount
+    unlimitedReceivedCount
+    distinctOwnerPairs
+    lastSeen
+  }
+}
+`;
+
+/** Raw-log query kept for subgraph deployments that predate allowance state. */
 export const APPROVAL_EVENTS_QUERY = `
 query ApprovalEvents($owner: Bytes!) {
   asOwner: approvalEvents(
@@ -49,19 +123,66 @@ query ApprovalEvents($owner: Bytes!) {
 }
 `;
 
+export type GraphMode = "allowance-state" | "approval-events";
+
 export interface GraphFetchResult {
   live: boolean;
   endpoint?: string;
   note: string;
   evidence: EvidenceItem[];
   stats: {
+    mode: GraphMode;
     asOwner: number;
     asSpender: number;
     contextUnlimited: number;
+    /** Unlimited allowances the subject still has outstanding. */
+    liveUnlimited: number;
   };
 }
 
-type ApprovalRow = {
+type SpenderRow = {
+  id: string;
+  liveUnlimitedCount: number;
+  unlimitedReceivedCount: number;
+  distinctOwnerPairs: number;
+  lastSeen?: string;
+};
+
+type AllowanceRow = {
+  id: string;
+  token: string;
+  currentValue: string;
+  peakValue: string;
+  unlimited: boolean;
+  revoked: boolean;
+  approvalCount?: number;
+  revokeCount?: number;
+  firstSeen?: string;
+  lastSeen: string;
+  lastTransactionHash: string;
+  spender?: SpenderRow;
+  owner?: { id: string };
+};
+
+type AccountRow = {
+  id: string;
+  approvalCount: number;
+  unlimitedGrantCount: number;
+  liveUnlimitedCount: number;
+  revokeCount: number;
+  distinctSpenderPairs: number;
+  firstSeen: string;
+  lastSeen: string;
+  allowances: AllowanceRow[];
+};
+
+type SpenderDetailRow = SpenderRow & {
+  approvalCount: number;
+  firstSeen: string;
+  allowancesReceived: AllowanceRow[];
+};
+
+type ApprovalEventRow = {
   id: string;
   token: string;
   owner: string;
@@ -74,41 +195,20 @@ type ApprovalRow = {
 const MAX_UINT =
   "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
-function short(addr: string) {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
-const KNOWN_SPENDERS: Record<string, string> = {
-  "0x000000000022d473030f116ddee9f6b43ac78ba3": "Uniswap Permit2",
-  "0xc36442b4a4522e871399cd717abdd847ab11fe88":
-    "Uniswap V3 NonfungiblePositionManager",
-  "0x40aa958dd87fc8305b97f2ba922cddca374bcd7f": "Circle TokenMessenger",
-  "0xbd3fa81b58ba92a82136038b25adec7066af3155": "Circle TokenMessenger (alt)",
-};
-
-function labelAddress(addr: string): string {
-  const lower = addr.toLowerCase();
-  const known = KNOWN_SPENDERS[lower];
-  return known ? `${short(addr)} (${known})` : short(addr);
-}
-
-function isUnlimited(value: string) {
+function isUnlimitedValue(value: string) {
   return (
-    value === MAX_UINT ||
-    value.startsWith("115792089") ||
-    value.length >= 70
+    value === MAX_UINT || value.startsWith("115792089") || value.length >= 70
   );
 }
 
-function formatUsdcHint(value: string): string {
+function formatUsdc(value: string): string {
   try {
     const v = BigInt(value);
     if (v === 0n) return "0 (revoked)";
-    if (isUnlimited(value)) return "unlimited (max uint256)";
-    // USDC 6 decimals heuristic for our probe token
+    if (isUnlimitedValue(value)) return "unlimited (max uint256)";
     if (v < 10n ** 15n) {
       const whole = Number(v) / 1e6;
-      if (Number.isFinite(whole)) return `≈ ${whole.toLocaleString()} USDC units`;
+      if (Number.isFinite(whole)) return `≈ ${whole.toLocaleString()} USDC`;
     }
     return value;
   } catch {
@@ -116,13 +216,188 @@ function formatUsdcHint(value: string): string {
   }
 }
 
-function rowToEvidence(
-  a: ApprovalRow,
+function isoFrom(seconds: string | undefined): string | undefined {
+  if (!seconds) return undefined;
+  const n = Number(seconds);
+  return Number.isFinite(n) ? new Date(n * 1000).toISOString() : undefined;
+}
+
+/* ------------------------------ state mode ------------------------------ */
+
+function allowanceToEvidence(
+  row: AllowanceRow,
+  subject: string,
+  role: "owner" | "spender",
+  ownerLiveUnlimited: number,
+): EvidenceItem {
+  const owner = role === "owner" ? subject : (row.owner?.id ?? subject);
+  const spender = role === "owner" ? (row.spender?.id ?? "") : subject;
+  const live = row.unlimited && !row.revoked;
+
+  let title: string;
+  if (role === "spender") {
+    title = live
+      ? "Holds a live unlimited allowance from another owner"
+      : "Named as spender on an allowance";
+  } else if (live) {
+    title = "Live unlimited allowance — still spendable";
+  } else if (row.revoked) {
+    title = "Allowance revoked — exposure closed";
+  } else {
+    title = "Finite allowance outstanding";
+  }
+
+  const when = isoFrom(row.lastSeen);
+
+  return {
+    id: row.id,
+    kind: "approval",
+    title,
+    detail: [
+      `token=${describeAddress(row.token)} (USDC)`,
+      `owner=${describeAddress(owner)}`,
+      spender ? `spender=${describeAddress(spender)}` : null,
+      `live=${formatUsdc(row.currentValue)}`,
+      row.peakValue !== row.currentValue
+        ? `peak=${formatUsdc(row.peakValue)}`
+        : null,
+      row.approvalCount ? `reapproved=${row.approvalCount}×` : null,
+      when ? `at=${when}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ref: row.lastTransactionHash ?? row.id,
+    url: row.lastTransactionHash
+      ? `https://etherscan.io/tx/${row.lastTransactionHash}`
+      : undefined,
+    occurredAt: when,
+    links: {
+      token: row.token.toLowerCase(),
+      owner: owner.toLowerCase(),
+      spender: spender ? spender.toLowerCase() : undefined,
+      unlimited: row.unlimited,
+      revoked: row.revoked,
+      tokenLabel: "USDC",
+      role,
+    },
+    metrics: {
+      currentValue: row.currentValue,
+      peakValue: row.peakValue,
+      approvalCount: row.approvalCount,
+      spenderLiveUnlimited: row.spender?.liveUnlimitedCount,
+      spenderDistinctOwners: row.spender?.distinctOwnerPairs,
+      ownerLiveUnlimited,
+    },
+  };
+}
+
+function concentratedSpenderToEvidence(row: SpenderRow): EvidenceItem {
+  const when = isoFrom(row.lastSeen);
+  return {
+    id: `spender-${row.id}`,
+    kind: "approval",
+    title: "Concentrated spender (network context)",
+    detail: [
+      `spender=${describeAddress(row.id)}`,
+      `liveUnlimited=${row.liveUnlimitedCount}`,
+      `distinctOwners=${row.distinctOwnerPairs}`,
+      when ? `lastSeen=${when}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ref: row.id,
+    url: `https://etherscan.io/address/${row.id}`,
+    occurredAt: when,
+    links: {
+      spender: row.id.toLowerCase(),
+      unlimited: row.liveUnlimitedCount > 0,
+      tokenLabel: "USDC",
+      role: "context",
+    },
+    metrics: {
+      spenderLiveUnlimited: row.liveUnlimitedCount,
+      spenderDistinctOwners: row.distinctOwnerPairs,
+    },
+  };
+}
+
+function buildStateEvidence(
+  subject: string,
+  account: AccountRow | null,
+  spender: SpenderDetailRow | null,
+  concentrated: SpenderRow[],
+): { evidence: EvidenceItem[]; stats: GraphFetchResult["stats"] } {
+  const ownerLive = account?.liveUnlimitedCount ?? 0;
+  const ownerRows = account?.allowances ?? [];
+  const spenderRows = spender?.allowancesReceived ?? [];
+
+  const evidence: EvidenceItem[] = [
+    ...ownerRows.map((row) =>
+      allowanceToEvidence(row, subject, "owner", ownerLive),
+    ),
+    ...spenderRows.map((row) =>
+      allowanceToEvidence(row, subject, "spender", ownerLive),
+    ),
+  ];
+
+  if (account) {
+    evidence.unshift({
+      id: "account-state",
+      kind: "other",
+      title: "Indexed allowance posture",
+      detail: [
+        `approvals=${account.approvalCount}`,
+        `unlimitedEverGranted=${account.unlimitedGrantCount}`,
+        `liveUnlimited=${account.liveUnlimitedCount}`,
+        `revokes=${account.revokeCount}`,
+        `distinctSpenderPairs=${account.distinctSpenderPairs}`,
+        `firstSeen=${isoFrom(account.firstSeen) ?? "?"}`,
+      ].join(" · "),
+      occurredAt: isoFrom(account.lastSeen),
+      metrics: { ownerLiveUnlimited: account.liveUnlimitedCount },
+    });
+  }
+
+  // Only borrow network context when the subject itself is thin.
+  if (ownerRows.length < 3) {
+    for (const row of concentrated) {
+      if (row.id.toLowerCase() === subject) continue;
+      evidence.push(concentratedSpenderToEvidence(row));
+    }
+  }
+
+  if (!account && !spender) {
+    evidence.unshift({
+      id: "graph-subject-empty",
+      kind: "other",
+      title: "No indexed allowance state for this subject",
+      detail:
+        "The subgraph indexes USDC Approvals from a mainnet start block; this address has none in that window. Try an address that approved USDC recently.",
+    });
+  }
+
+  return {
+    evidence,
+    stats: {
+      mode: "allowance-state",
+      asOwner: ownerRows.length,
+      asSpender: spenderRows.length,
+      contextUnlimited: concentrated.length,
+      liveUnlimited: ownerLive,
+    },
+  };
+}
+
+/* ------------------------------ event mode ------------------------------ */
+
+function eventToEvidence(
+  row: ApprovalEventRow,
   index: number,
   role: "owner" | "spender" | "context",
 ): EvidenceItem {
-  const unlimited = isUnlimited(a.value);
-  const revoked = a.value === "0";
+  const unlimited = isUnlimitedValue(row.value);
+  const revoked = row.value === "0";
+
   let title: string;
   if (role === "context") {
     title = unlimited
@@ -140,36 +415,123 @@ function rowToEvidence(
     title = "USDC approval (Graph)";
   }
 
-  const when = a.timestamp
-    ? new Date(Number(a.timestamp) * 1000).toISOString()
-    : undefined;
+  const when = isoFrom(row.timestamp);
 
   return {
-    id: a.id || `${role}-${index}`,
+    id: row.id || `${role}-${index}`,
     kind: "approval",
     title,
     detail: [
-      `token=${labelAddress(a.token)} (USDC)`,
-      `owner=${labelAddress(a.owner)}`,
-      `spender=${labelAddress(a.spender)}`,
-      `value=${formatUsdcHint(a.value)}`,
+      `token=${describeAddress(row.token)} (USDC)`,
+      `owner=${describeAddress(row.owner)}`,
+      `spender=${describeAddress(row.spender)}`,
+      `value=${formatUsdc(row.value)}`,
       when ? `at=${when}` : null,
     ]
       .filter(Boolean)
       .join(" · "),
-    ref: a.transactionHash ?? a.id,
-    url: a.transactionHash
-      ? `https://etherscan.io/tx/${a.transactionHash}`
+    ref: row.transactionHash ?? row.id,
+    url: row.transactionHash
+      ? `https://etherscan.io/tx/${row.transactionHash}`
       : undefined,
     occurredAt: when,
     links: {
-      token: a.token.toLowerCase(),
-      owner: a.owner.toLowerCase(),
-      spender: a.spender.toLowerCase(),
+      token: row.token.toLowerCase(),
+      owner: row.owner.toLowerCase(),
+      spender: row.spender.toLowerCase(),
       unlimited,
+      revoked,
       tokenLabel: "USDC",
       role,
     },
+    metrics: { currentValue: row.value },
+  };
+}
+
+function buildEventEvidence(
+  subject: string,
+  asOwner: ApprovalEventRow[],
+  asSpender: ApprovalEventRow[],
+  recentUnlimited: ApprovalEventRow[],
+): { evidence: EvidenceItem[]; stats: GraphFetchResult["stats"] } {
+  const evidence: EvidenceItem[] = [
+    ...asOwner.map((row, i) => eventToEvidence(row, i, "owner")),
+    ...asSpender.map((row, i) => eventToEvidence(row, i, "spender")),
+  ];
+
+  if (asOwner.length < 3) {
+    for (const [i, row] of recentUnlimited.entries()) {
+      if (row.owner.toLowerCase() === subject) continue;
+      evidence.push(eventToEvidence(row, i, "context"));
+    }
+  }
+
+  if (asOwner.length === 0 && asSpender.length === 0) {
+    evidence.unshift({
+      id: "graph-subject-empty",
+      kind: "other",
+      title: "No subject-scoped ApprovalEvents in indexed window",
+      detail:
+        "This subgraph indexes USDC Approvals from a recent mainnet start block. Try an address that recently approved USDC, or wait for deeper sync.",
+    });
+  }
+
+  return {
+    evidence,
+    stats: {
+      mode: "approval-events",
+      asOwner: asOwner.length,
+      asSpender: asSpender.length,
+      contextUnlimited: recentUnlimited.length,
+      liveUnlimited: asOwner.filter(
+        (r) => isUnlimitedValue(r.value) && r.value !== "0",
+      ).length,
+    },
+  };
+}
+
+/* --------------------------- capability probing --------------------------- */
+
+type GqlResponse = {
+  data?: Record<string, unknown>;
+  errors?: Array<{ message: string }>;
+};
+
+/**
+ * Which schema the configured endpoint speaks. A fresh `graph deploy` needs a
+ * full resync, so during that window the old deployment is still serving —
+ * cached with a TTL so the richer schema is picked up without a restart.
+ */
+let cachedMode: { mode: GraphMode; at: number } | null = null;
+const MODE_TTL_MS = 10 * 60_000;
+
+function schemaRejected(errors: Array<{ message: string }> | undefined) {
+  if (!errors?.length) return false;
+  return errors.some((e) =>
+    /has no field|Unknown (field|argument|type)|Type `?\w+`? has no/i.test(
+      e.message,
+    ),
+  );
+}
+
+async function runQuery(
+  endpoint: string,
+  headers: Record<string, string>,
+  query: string,
+  variables: Record<string, string>,
+) {
+  const response = await fetchJson(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query, variables }),
+    timeoutMs: 12_000,
+    retries: 1,
+  });
+  return {
+    ok: response.ok,
+    status: response.status,
+    error: response.error,
+    payload: (response.json ?? {}) as GqlResponse,
   };
 }
 
@@ -182,7 +544,13 @@ export async function fetchGraphEvidence(
 ): Promise<GraphFetchResult> {
   const endpoint = process.env.GRAPH_SUBGRAPH_URL?.trim();
   const apiKey = process.env.GRAPH_API_KEY?.trim();
-  const emptyStats = { asOwner: 0, asSpender: 0, contextUnlimited: 0 };
+  const emptyStats: GraphFetchResult["stats"] = {
+    mode: "approval-events",
+    asOwner: 0,
+    asSpender: 0,
+    contextUnlimited: 0,
+    liveUnlimited: 0,
+  };
 
   if (!endpoint) {
     return {
@@ -204,109 +572,146 @@ export async function fetchGraphEvidence(
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const owner = address.toLowerCase();
+  const subject = address.toLowerCase();
+  const modeFresh =
+    cachedMode !== null && Date.now() - cachedMode.at < MODE_TTL_MS;
+  const tryState = !modeFresh || cachedMode?.mode === "allowance-state";
+
   try {
-    const response = await fetchJson(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        query: APPROVAL_EVENTS_QUERY,
-        variables: { owner },
-      }),
-      timeoutMs: 12_000,
-      retries: 1,
+    if (tryState) {
+      const state = await runQuery(endpoint, headers, ALLOWANCE_STATE_QUERY, {
+        account: subject,
+      });
+
+      if (state.ok && !state.payload.errors?.length) {
+        cachedMode = { mode: "allowance-state", at: Date.now() };
+        const data = state.payload.data as
+          | {
+              account?: AccountRow | null;
+              spender?: SpenderDetailRow | null;
+              concentratedSpenders?: SpenderRow[];
+            }
+          | undefined;
+        const built = buildStateEvidence(
+          subject,
+          data?.account ?? null,
+          data?.spender ?? null,
+          data?.concentratedSpenders ?? [],
+        );
+        return {
+          live: true,
+          endpoint,
+          note: `Live Graph OK (allowance-state) — allowances=${built.stats.asOwner}, asSpender=${built.stats.asSpender}, liveUnlimited=${built.stats.liveUnlimited}.`,
+          ...built,
+        };
+      }
+
+      if (state.ok && schemaRejected(state.payload.errors)) {
+        // Deployed subgraph predates allowance state — use raw logs below.
+        cachedMode = { mode: "approval-events", at: Date.now() };
+      } else if (!state.ok) {
+        return {
+          live: false,
+          endpoint,
+          note: state.error
+            ? `Graph fetch failed: ${state.error}`
+            : `Graph HTTP ${state.status}`,
+          evidence: [
+            {
+              id: "graph-http-error",
+              kind: "other",
+              title: "Graph request failed",
+              detail:
+                state.error ?? `HTTP ${state.status} from subgraph endpoint.`,
+            },
+          ],
+          stats: emptyStats,
+        };
+      } else {
+        const message =
+          state.payload.errors?.map((e) => e.message).join("; ") ??
+          "Unknown GraphQL error";
+        return {
+          live: false,
+          endpoint,
+          note: message,
+          evidence: [
+            {
+              id: "graph-gql-error",
+              kind: "other",
+              title: "Graph GraphQL error",
+              detail: message,
+            },
+          ],
+          stats: emptyStats,
+        };
+      }
+    }
+
+    const events = await runQuery(endpoint, headers, APPROVAL_EVENTS_QUERY, {
+      owner: subject,
     });
 
-    if (!response.ok) {
+    if (!events.ok) {
       return {
         live: false,
         endpoint,
-        note: response.error
-          ? `Graph fetch failed: ${response.error}`
-          : `Graph HTTP ${response.status}`,
+        note: events.error
+          ? `Graph fetch failed: ${events.error}`
+          : `Graph HTTP ${events.status}`,
         evidence: [
           {
             id: "graph-http-error",
             kind: "other",
             title: "Graph request failed",
-            detail: response.error
-              ? response.error
-              : `HTTP ${response.status} from subgraph endpoint.`,
+            detail:
+              events.error ?? `HTTP ${events.status} from subgraph endpoint.`,
           },
         ],
         stats: emptyStats,
       };
     }
 
-    const payload = response.json as {
-      data?: {
-        asOwner?: ApprovalRow[];
-        asSpender?: ApprovalRow[];
-        recentUnlimited?: ApprovalRow[];
-      };
-      errors?: Array<{ message: string }>;
-    };
-
-    if (payload.errors?.length) {
+    if (events.payload.errors?.length) {
+      const message = events.payload.errors.map((e) => e.message).join("; ");
       return {
         live: false,
         endpoint,
-        note: payload.errors.map((e) => e.message).join("; "),
+        note: message,
         evidence: [
           {
             id: "graph-gql-error",
             kind: "other",
             title: "Graph GraphQL error",
-            detail: payload.errors.map((e) => e.message).join("; "),
+            detail: message,
           },
         ],
         stats: emptyStats,
       };
     }
 
-    const asOwner = payload.data?.asOwner ?? [];
-    const asSpender = payload.data?.asSpender ?? [];
-    const recentUnlimited = payload.data?.recentUnlimited ?? [];
+    const data = events.payload.data as
+      | {
+          asOwner?: ApprovalEventRow[];
+          asSpender?: ApprovalEventRow[];
+          recentUnlimited?: ApprovalEventRow[];
+        }
+      | undefined;
 
-    const evidence: EvidenceItem[] = [
-      ...asOwner.map((a, i) => rowToEvidence(a, i, "owner")),
-      ...asSpender.map((a, i) => rowToEvidence(a, i, "spender")),
-    ];
-
-    // Network context (labeled) when subject has little owner history in indexed window
-    if (asOwner.length < 3) {
-      for (const [i, row] of recentUnlimited.entries()) {
-        if (row.owner.toLowerCase() === owner) continue;
-        evidence.push(rowToEvidence(row, i, "context"));
-      }
-    }
-
-    if (asOwner.length === 0 && asSpender.length === 0) {
-      evidence.unshift({
-        id: "graph-subject-empty",
-        kind: "other",
-        title: "No subject-scoped ApprovalEvents in indexed window",
-        detail:
-          "This subgraph currently indexes USDC Approvals from a recent mainnet start block. Try an address that recently approved USDC, or wait for deeper sync / lower startBlock.",
-      });
-    }
-
-    const stats = {
-      asOwner: asOwner.length,
-      asSpender: asSpender.length,
-      contextUnlimited: recentUnlimited.length,
-    };
+    const built = buildEventEvidence(
+      subject,
+      data?.asOwner ?? [],
+      data?.asSpender ?? [],
+      data?.recentUnlimited ?? [],
+    );
 
     return {
       live: true,
       endpoint,
-      note: `Live Graph OK — owner=${stats.asOwner}, spender=${stats.asSpender}, contextUnlimited≈${stats.contextUnlimited}.`,
-      evidence,
-      stats,
+      note: `Live Graph OK (approval-events — deploy v0.0.2 for allowance state) — owner=${built.stats.asOwner}, spender=${built.stats.asSpender}, context≈${built.stats.contextUnlimited}.`,
+      ...built,
     };
   } catch (error) {
     return {
