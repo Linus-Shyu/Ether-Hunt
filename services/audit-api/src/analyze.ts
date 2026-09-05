@@ -4,6 +4,7 @@ import {
   isKnownIntegration,
   isPermit2,
   labelFor,
+  shortAddress,
 } from "./spenders.js";
 
 /** A spender holding this many live unlimited allowances is a blast radius. */
@@ -32,6 +33,23 @@ function concentration(item: EvidenceItem): number {
   return item.metrics?.spenderLiveUnlimited ?? 0;
 }
 
+/** One row per (token, spender), keeping the most recent. */
+function dedupeByPair(items: EvidenceItem[]): EvidenceItem[] {
+  const newest = new Map<string, EvidenceItem>();
+  for (const item of items) {
+    const key = `${item.links?.token ?? ""}-${item.links?.spender ?? item.id}`;
+    const current = newest.get(key);
+    if (!current) {
+      newest.set(key, item);
+      continue;
+    }
+    if ((item.occurredAt ?? "") > (current.occurredAt ?? "")) {
+      newest.set(key, item);
+    }
+  }
+  return [...newest.values()];
+}
+
 /**
  * Deterministic analysis over structured Graph evidence.
  *
@@ -47,9 +65,12 @@ export function analyzeEvidence(evidence: EvidenceItem[]): Finding[] {
   const ownerEdges = subjectEdges.filter((e) => e.links?.role === "owner");
   const spenderEdges = subjectEdges.filter((e) => e.links?.role === "spender");
 
-  const liveUnlimited = ownerEdges
-    .filter(isLiveUnlimited)
-    .sort((a, b) => concentration(b) - concentration(a));
+  // In allowance-state mode each row is already one pair. In the raw-log
+  // fallback a re-approved pair shows up once per event, so collapse to the
+  // newest row per pair before itemising.
+  const liveUnlimited = dedupeByPair(ownerEdges.filter(isLiveUnlimited)).sort(
+    (a, b) => concentration(b) - concentration(a),
+  );
   const revokedEdges = ownerEdges.filter((e) => e.links?.revoked === true);
   const finiteEdges = ownerEdges.filter(
     (e) => !isLiveUnlimited(e) && e.links?.revoked !== true,
@@ -68,9 +89,13 @@ export function analyzeEvidence(evidence: EvidenceItem[]): Finding[] {
 
     findings.push({
       id: findingId("live-unlimited", item.id),
+      // Name the spender in the title — a wallet with a dozen infinite
+      // approvals otherwise gets a dozen identical headlines.
       title: known
         ? `Unlimited allowance to ${labelFor(spender ?? "") ?? "a known contract"}`
-        : "Unlimited allowance to an unlabelled spender",
+        : spender
+          ? `Unlimited allowance to unlabelled ${shortAddress(spender)}`
+          : "Unlimited allowance to an unlabelled spender",
       severity,
       confidence,
       summary: [
@@ -86,9 +111,11 @@ export function analyzeEvidence(evidence: EvidenceItem[]): Finding[] {
       ]
         .filter(Boolean)
         .join(" "),
+      // The subject may be a wallet or a protocol contract, and "revoke now" is
+      // wrong advice for a router whose approvals are operational by design.
       recommendation: known
         ? "Keep only if you still use this integration; otherwise revoke and re-approve exact amounts per trade."
-        : "Revoke now unless you can identify this spender. Prefer Permit2 or exact-amount approvals.",
+        : "Revoke unless this spender is a counterparty you still rely on. If the subject is a contract, treat each standing infinite approval as a live dependency to review.",
       evidenceIds: [item.id],
     });
   }
