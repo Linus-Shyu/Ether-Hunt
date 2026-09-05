@@ -1,50 +1,47 @@
 type Preset = { label: string; value: string; note: string };
 
+/**
+ * Every entry is verified to return subject-scoped rows from the deployed
+ * subgraph. Historic exploit addresses were removed: the index starts at
+ * mainnet block 19,000,000, so pre-2024 wallets can only ever return an empty
+ * dossier, and shipping a button that scans to nothing is worse than shipping
+ * fewer buttons.
+ */
 export const CASE_FILES: Preset[] = [
   {
-    label: "Dense USDC",
+    label: "Widest exposure",
+    value: "0x00000f91109c4d0007e90000d9facad5298a0cac",
+    note: "Contract · dozens of live unlimited grants, most to unnamed spenders",
+  },
+  {
+    label: "Unnamed spenders",
+    value: "0x63242a4ea82847b20e506b63b0e2e2eff0cc6cb0",
+    note: "Contract · six escalations alongside a recognised Permit2 grant",
+  },
+  {
+    label: "Half recognised",
+    value: "0x4a6c312ec70e8747a587ee860a0353cd42be0ae0",
+    note: "Contract · Morpho and vault grants named, four unnamed escalated",
+  },
+  {
+    label: "Short enough to read",
+    value: "0xbbc133749e308694277aaa82ac780eb8aaed77f6",
+    note: "Contract · three escalations, small enough to check end to end",
+  },
+  {
+    label: "Named DeFi stack",
+    value: "0x4de4fccc14eab1d69890a49471a9d57b96dd725f",
+    note: "Contract · Morpho, Balancer and Curve identified — one outlier left",
+  },
+  {
+    label: "No false alarms",
     value: "0x0218033bc4c88e91a6cc9a6aceee421dda39448d",
-    note: "Rich approval constellation — best graph demo",
-  },
-  {
-    label: "Ronin Bridge ’22",
-    value: "0x098B716B8Aaf21512996dC57EB0615e2383E2f96",
-    note: "$624M validator key compromise",
-  },
-  {
-    label: "Poly Network ’21",
-    value: "0xC8a65Fadf0e0dDAf421F28FEAb69Bf6E2E589963",
-    note: "$611M cross-chain keeper flaw",
-  },
-  {
-    label: "Nomad Bridge ’22",
-    value: "0x56D8B635A7C88Fd1104D23d632AF40c1C3Aac4e3",
-    note: "$190M replayable proof bug",
-  },
-  {
-    label: "Beanstalk ’22",
-    value: "0x1c5dCdd006EA78a7E4783f9e6021C32935a10fb4",
-    note: "$182M flash-loan governance seizure",
-  },
-  {
-    label: "BadgerDAO ’21",
-    value: "0x1FCdb04d0C5364FBd92C73cA8AF9BAA72c269107",
-    note: "$120M malicious approval injection",
-  },
-  {
-    label: "Euler Finance ’23",
-    value: "0xb66cd966670d962C227B3eABA30a872DbFB995db",
-    note: "$197M donation accounting exploit",
-  },
-  {
-    label: "Bybit cold wallet ’25",
-    value: "0x47666Fab8bd0Ac7003bce3f5C3585383F09486E2",
-    note: "$1.5B signing-interface compromise",
+    note: "Wallet · unlimited to Permit2 and Circle, so nothing escalates",
   },
   {
     label: "vitalik.eth",
     value: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-    note: "Clean baseline — proves no false positives",
+    note: "Clean baseline · scores low, which is how you know high means something",
   },
 ];
 
@@ -59,8 +56,9 @@ export function CaseFiles({ address, onSelect }: Props) {
       <div className="container">
         <h2 className="section-title">Case files</h2>
         <p className="section-lead">
-          Nine real subjects — eight historic exploits plus one clean wallet, so
-          you can watch the scanner stay quiet when nothing is wrong.
+          Live mainnet subjects, ordered from worst exposure to clean. The last
+          two are here so you can watch the scanner stay quiet when nothing is
+          actually wrong.
         </p>
         <div className="presets">
           {CASE_FILES.map((preset) => (
