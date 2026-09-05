@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" fill="#152033"/>
+  <g stroke="#2a3a52" stroke-width="2" opacity="0.95">
+    <path d="M64 128h384M64 256h384M64 384h384M128 64v384M256 64v384M384 64v384"/>
+  </g>
+  <text
+    x="256"
+    y="312"
+    text-anchor="middle"
+    font-family="Arial Narrow, Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="210"
+    font-weight="800"
+    letter-spacing="-18"
+    fill="#c45c26"
+  >EH</text>
+  <g stroke="#0b6e4f" stroke-width="14" fill="none" stroke-linecap="square">
+    <circle cx="392" cy="120" r="52"/>
+    <path d="M392 52v28M392 160v28M324 120h28M432 120h28"/>
+  </g>
+</svg>

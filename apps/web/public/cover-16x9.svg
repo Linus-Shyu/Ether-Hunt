@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="none">
+  <defs>
+    <linearGradient id="wash" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c45c26" stop-opacity="0.22"/>
+      <stop offset="40%" stop-color="#dfe7ee" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0b6e4f" stop-opacity="0.16"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" stroke="#152033" stroke-opacity="0.08" stroke-width="1"/>
+    </pattern>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" result="noise"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.08  0 0 0 0 0.1  0 0 0 0 0.12  0 0 0 0.08 0" in="noise"/>
+    </filter>
+  </defs>
+
+  <!-- field -->
+  <rect width="1280" height="720" fill="#dfe7ee"/>
+  <rect width="1280" height="720" fill="url(#grid)"/>
+  <rect width="1280" height="720" fill="url(#wash)"/>
+  <rect width="1280" height="720" filter="url(#grain)" opacity="0.55"/>
+
+  <!-- topo lines -->
+  <g stroke="#152033" stroke-opacity="0.14" stroke-width="1.4" fill="none">
+    <path d="M-40 520 C 160 450, 300 590, 480 540 S 820 430, 980 510 S 1180 600, 1320 530"/>
+    <path d="M-40 470 C 180 400, 340 540, 520 490 S 860 390, 1040 470 S 1220 560, 1320 490"/>
+    <path d="M-20 180 C 220 110, 400 240, 620 170 S 960 70, 1140 150 S 1260 210, 1300 190"/>
+  </g>
+
+  <!-- dark brand slab left -->
+  <rect x="0" y="0" width="520" height="720" fill="#152033"/>
+  <g stroke="#2a3a52" stroke-width="1.2" opacity="0.95">
+    <path d="M40 120h440M40 240h440M40 360h440M40 480h440M40 600h440"/>
+    <path d="M120 40v640M240 40v640M360 40v640M480 40v640"/>
+  </g>
+
+  <!-- EH mark -->
+  <text
+    x="260"
+    y="300"
+    text-anchor="middle"
+    font-family="Arial Narrow, Helvetica Neue Condensed, Helvetica, Arial, sans-serif"
+    font-size="168"
+    font-weight="800"
+    letter-spacing="-14"
+    fill="#c45c26"
+  >EH</text>
+  <g stroke="#0b6e4f" stroke-width="10" fill="none" stroke-linecap="square">
+    <circle cx="390" cy="150" r="42"/>
+    <path d="M390 96v22M390 182v22M336 150h22M422 150h22"/>
+  </g>
+
+  <!-- title block on field -->
+  <text
+    x="580"
+    y="290"
+    font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="72"
+    font-weight="800"
+    letter-spacing="-2.5"
+    fill="#152033"
+  >Ether Hunt</text>
+  <rect x="580" y="312" width="96" height="6" fill="#c45c26"/>
+  <text
+    x="580"
+    y="360"
+    font-family="IBM Plex Mono, SF Mono, Menlo, Consolas, monospace"
+    font-size="22"
+    font-weight="500"
+    fill="#334155"
+  >Pay-per-scan allowance audits</text>
+  <text
+    x="580"
+    y="398"
+    font-family="IBM Plex Mono, SF Mono, Menlo, Consolas, monospace"
+    font-size="18"
+    fill="#5a6a7c"
+  >Hedera x402 · The Graph · Arc Agent Stack</text>
+
+  <!-- reticle on right -->
+  <g transform="translate(1040 420)" stroke="#c45c26" stroke-width="2.2" fill="none">
+    <circle r="108" stroke-opacity="0.55"/>
+    <circle r="68" stroke-opacity="0.35"/>
+    <circle r="14" fill="#c45c26" stroke="none" fill-opacity="0.9"/>
+    <path d="M0 -138 V-116 M0 116 V138 M-138 0 H-116 M116 0 H138" stroke-opacity="0.7"/>
+  </g>
+
+  <!-- corner ticks -->
+  <g stroke="#152033" stroke-opacity="0.25" stroke-width="1.4" fill="none">
+    <path d="M560 80 H700 M560 80 V160"/>
+    <path d="M1200 640 H1060 M1200 640 V560"/>
+  </g>
+
+  <text
+    x="580"
+    y="660"
+    font-family="IBM Plex Mono, SF Mono, Menlo, Consolas, monospace"
+    font-size="14"
+    letter-spacing="0.08em"
+    fill="#64748b"
+  >ETHONLINE 2026 · CLASSIC</text>
+</svg>
