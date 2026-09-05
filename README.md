@@ -26,7 +26,7 @@ This is built for Classic judging priorities: **Technicality → Originality →
 | # | Partner | Track | How we qualify | How to verify |
 | --- | --- | --- | --- | --- |
 | 1 | **Hedera** | AI & Agentic Payments (x402 / Blocky402) | Live x402 gate on `POST /audit` via `ExactHederaScheme` + Blocky402 testnet; agent completes ≥1 real paid request | `DEV_BYPASS_PAYMENT=false` → unpaid `POST /audit` returns **402** → `npm run agent:scan` or UI **Hedera → Pay & hunt** → report `sources.payment.rail = hedera-x402` |
-| 2 | **The Graph** | Best AI Use Case — **From Scratch** | Own Studio subgraph `ether-hunt-approvals`; audit + cite-only AI grounded on live Graph rows; allowance graph viz | Set `GRAPH_SUBGRAPH_URL`; scan Dense USDC address; dossier shows **Graph LIVE** + `[AI]` cites + relationship graph |
+| 2 | **The Graph** | Best AI Use Case — **From Scratch** | Own Studio subgraph `ether-hunt-approvals` that folds raw approvals into **live allowance state** (`Allowance` / `Account` / `Spender`) instead of mirroring logs; cite-only AI grounded on those rows | Set `GRAPH_SUBGRAPH_URL`; scan Dense USDC address; dossier shows **Graph LIVE**, the schema mode, and a **Copy subgraph query** button holding the exact GraphQL that ran |
 | 3 | **Arc** | Best Agentic Economy / Circle Agent Stack | `POST /audit/arc` Gateway nanopayments; Circle agent wallet pays via `circle services pay --chain ARC-TESTNET` | `npm run agent:arc` or UI **Arc → Pay & hunt** → `rail = arc-gateway` |
 
 Judge packs (detail): [`docs/prize-checklist.md`](docs/prize-checklist.md) · [`docs/demo-script.md`](docs/demo-script.md) · [`docs/ai-attribution.md`](docs/ai-attribution.md)
@@ -68,9 +68,10 @@ The UI is built so no claim has to be taken on trust:
                                          │
               ┌──────────────────────────┼──────────────────────────┐
               ▼                          ▼                          ▼
-     The Graph Studio          Rule detectors +              DeepSeek / LLM
-     ether-hunt-approvals      known spenders                cite-only synthesis
-     (live ApprovalEvent)
+     The Graph Studio          Rule detectors over           DeepSeek / LLM
+     ether-hunt-approvals      structured links +            cite-only synthesis
+     Allowance / Account /     address registry
+     Spender (live state)
               │
               ▼
                     AuditReport { findings, evidence, ai, payment }
@@ -89,6 +90,43 @@ paying, and a **Verifiable rails** panel that links each partner's settlement
 artefact once it exists.
 
 Local rail uses `POST /scan/local` (**unpaid / `dev-bypass`**) — for UI only, **not** a prize payment proof.
+
+---
+
+## Subgraph: allowance state, not an event mirror
+
+`subgraphs/token-approvals` deliberately does more than re-emit `Approval` logs,
+because the log stream cannot answer the only question that matters to a holder:
+**is this allowance still spendable right now?**
+
+The mapping folds every log into three entities:
+
+| Entity | What it holds | Why the audit needs it |
+| --- | --- | --- |
+| `Allowance` | Live value, `unlimited`, `revoked`, peak value, re-approval count per `(token, owner, spender)` | Distinguishes a live infinite approval from one that was granted in 2024 and revoked the same day |
+| `Account` | Per-owner `liveUnlimitedCount`, grants, revokes, distinct spender pairs | Standing exposure without replaying history |
+| `Spender` | Per-spender `liveUnlimitedCount`, `distinctOwnerPairs` | Blast radius — how many wallets one contract compromise would drain |
+
+`unlimited` and `revoke` are classified at index time, so detectors read booleans
+instead of re-parsing value strings. `Account.liveUnlimitedCount` is maintained by
+tracking boundary crossings on each pair, not by rescanning allowance lists.
+
+**Schema compatibility.** A new deployment must resync from `startBlock`, so the
+API probes the allowance-state query, caches which schema the endpoint speaks, and
+falls back to the raw-log query while an older deployment is still serving. The
+dossier reports which mode answered.
+
+```bash
+cd subgraphs/token-approvals
+npx graph codegen && npx graph build
+npx graph auth <STUDIO_DEPLOY_KEY>
+npx graph deploy ether-hunt-approvals    # bump to v0.0.2
+```
+
+**Indexed window caveat:** the manifest tracks mainnet USDC from
+`startBlock: 19000000` (2024-01-13). Addresses whose activity predates that block
+have no subject-scoped rows by construction, and the dossier says so rather than
+inventing findings.
 
 ---
 
