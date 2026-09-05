@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wash" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c45c26" stop-opacity="0.18"/>
+      <stop offset="45%" stop-color="#e7edf2" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0b6e4f" stop-opacity="0.12"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" stroke="#152033" stroke-opacity="0.07" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="#dfe7ee"/>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+  <rect width="1600" height="900" fill="url(#wash)"/>
+  <!-- topographic contours -->
+  <g stroke="#152033" stroke-opacity="0.14" stroke-width="1.2" fill="none">
+    <path d="M-40 620 C 180 540, 320 700, 520 640 S 860 520, 1040 600 S 1380 720, 1640 640"/>
+    <path d="M-40 560 C 200 480, 360 640, 560 580 S 900 460, 1100 540 S 1420 660, 1640 580"/>
+    <path d="M-40 500 C 220 420, 400 580, 600 520 S 940 400, 1160 480 S 1460 600, 1640 520"/>
+    <path d="M-20 200 C 260 120, 480 280, 720 200 S 1100 80, 1320 180 S 1520 260, 1620 220"/>
+  </g>
+  <!-- scope / reticle -->
+  <g transform="translate(1180 260)" stroke="#c45c26" stroke-width="2" fill="none">
+    <circle r="120" stroke-opacity="0.55"/>
+    <circle r="78" stroke-opacity="0.35"/>
+    <circle r="18" fill="#c45c26" stroke="none" fill-opacity="0.85"/>
+    <path d="M0 -150 V-128 M0 128 V150 M-150 0 H-128 M128 0 H150" stroke-opacity="0.7"/>
+    <path d="M-42 -42 L-22 -22 M42 -42 L22 -22 M-42 42 L-22 22 M42 42 L22 22" stroke-opacity="0.5"/>
+  </g>
+  <!-- range ticks -->
+  <g stroke="#152033" stroke-opacity="0.2" stroke-width="1">
+    <path d="M80 80 H220 M80 80 V160"/>
+    <path d="M1520 740 H1380 M1520 740 V660"/>
+  </g>
+</svg>
