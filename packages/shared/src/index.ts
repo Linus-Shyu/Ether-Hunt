@@ -114,3 +114,11 @@ export interface AuditReport {
 export function isAddressLike(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 }
+
+export {
+  CASE_FILES,
+  CASE_FILE_ADDRESSES,
+  isCaseFileAddress,
+  type CaseFilePreset,
+} from "./caseFiles.js";
+

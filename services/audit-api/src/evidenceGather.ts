@@ -1,4 +1,4 @@
-import type { EvidenceItem } from "@ether-hunt/shared";
+import { CASE_FILE_ADDRESSES, type EvidenceItem } from "@ether-hunt/shared";
 import { fetchGraphEvidence } from "./graph.js";
 import { fetchRpcApprovalEvidence, fetchAddressProfile } from "./rpcEvidence.js";
 
@@ -11,6 +11,8 @@ export type EvidenceBundle = {
 
 const TTL_MS = 5 * 60_000;
 const cache = new Map<string, EvidenceBundle | Promise<EvidenceBundle>>();
+
+let caseFilesWarmStarted = false;
 
 export async function gatherEvidence(address: string): Promise<EvidenceBundle> {
   // Graph first — prize source. Do NOT Promise.all with RPC profile:
@@ -59,6 +61,21 @@ export function warmEvidence(address: string): void {
       return gatherEvidence(address);
     });
   cache.set(key, pending);
+}
+
+/**
+ * Prefetch every Case File so the first judge click is a cache hit with live
+ * Graph rows (primary or sync-fallback), not an empty dossier.
+ */
+export function warmCaseFiles(): void {
+  if (caseFilesWarmStarted) return;
+  caseFilesWarmStarted = true;
+  for (const address of CASE_FILE_ADDRESSES) {
+    warmEvidence(address);
+  }
+  console.log(
+    `[ether-hunt] warming ${CASE_FILE_ADDRESSES.length} Case File Graph caches`,
+  );
 }
 
 export async function takeEvidence(address: string): Promise<EvidenceBundle> {

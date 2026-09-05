@@ -19,6 +19,12 @@ Then set in `.env` (example after current deploy):
 
 ```
 GRAPH_SUBGRAPH_URL=https://api.studio.thegraph.com/query/1758666/ether-hunt-approvals/v0.0.2
+GRAPH_SUBGRAPH_FALLBACK_URL=https://api.studio.thegraph.com/query/1758666/ether-hunt-approvals/v0.0.1
 ```
+
+Keep the tip-synced prior version as `GRAPH_SUBGRAPH_FALLBACK_URL` while v0.0.2
+resyncs from `startBlock`. The audit-api prefers allowance-state on the primary
+URL, then retries the fallback when the subject has no indexed rows — so Case
+Files stay reviewable during catch-up.
 
 Update `subgraph.yaml` `source.address` / `startBlock` for the tokens you care about, or expand to a templates-based multi-token design.

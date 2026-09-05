@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { isAddressLike, type AuditReport } from "@ether-hunt/shared";
+import { CASE_FILES, isAddressLike, type AuditReport } from "@ether-hunt/shared";
 import { analyzeEvidence, summarizeFindings } from "./analyze.js";
 import { hederaPaidScan } from "@ether-hunt/agent-consumer/hedera";
 import { arcPaidScan } from "@ether-hunt/agent-consumer/arc";
@@ -16,9 +16,9 @@ import {
   resolveHederaSettleExplorerUrl,
 } from "./payment.js";
 import { createArcPaymentMiddleware } from "./payment-arc.js";
-import { takeEvidence, warmEvidence } from "./evidenceGather.js";
+import { takeEvidence, warmEvidence, warmCaseFiles } from "./evidenceGather.js";
 import { synthesizeWithAi } from "./synthesize.js";
-
+import { resolveGraphEndpoints } from "./graph.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -35,11 +35,17 @@ app.use(
   }),
 );
 
-app.get("/health", (c) =>
-  c.json({
+app.get("/health", (c) => {
+  const graphEndpoints = resolveGraphEndpoints();
+  return c.json({
     ok: true,
     service: "ether-hunt-audit-api",
     partners: ["hedera-x402", "the-graph", "arc-agent-stack"],
+    graph: {
+      primary: graphEndpoints.primary ?? null,
+      fallback: graphEndpoints.fallback ?? null,
+      caseFiles: CASE_FILES.length,
+    },
     x402: {
       bypass: process.env.DEV_BYPASS_PAYMENT !== "false",
       payTo: Boolean(process.env.HEDERA_SERVICE_ACCOUNT_ID),
@@ -74,8 +80,8 @@ app.get("/health", (c) =>
             ? "anthropic"
             : "none",
     },
-  }),
-);
+  });
+});
 
 const auditBody = z.object({
   chainId: z.number().int().positive().default(1),
@@ -280,7 +286,8 @@ app.get("/partners", (c) =>
       {
         partner: "The Graph",
         track: "Best AI Use Case (From Scratch)",
-        status: "live when GRAPH_SUBGRAPH_URL set; RPC fallback is not Graph",
+        status:
+          "Studio subgraph + sync-fallback URL + Case File warm cache; RPC is not Graph",
       },
       {
         partner: "Arc",
@@ -293,4 +300,5 @@ app.get("/partners", (c) =>
 );
 
 console.log(`Ether Hunt audit-api on http://127.0.0.1:${port}`);
+warmCaseFiles();
 serve({ fetch: app.fetch, port });
