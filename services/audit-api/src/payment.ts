@@ -8,6 +8,14 @@ export type PaymentState = {
   settled: boolean;
   rail: "hedera-x402" | "arc-gateway" | "dev-bypass" | "none";
   note: string;
+  /** Facilitator API host (not always browser-friendly) */
+  facilitatorUrl?: string;
+  /** Human-readable docs / status page for the facilitator */
+  facilitatorDocsUrl?: string;
+  payTo?: string;
+  explorerUrl?: string;
+  /** Optional second explorer (e.g. Arc agent SCA) */
+  agentExplorerUrl?: string;
 };
 
 const ASSET = (process.env.X402_ASSET ?? "usdc").toLowerCase();
@@ -58,6 +66,93 @@ function createHederaResourceServer() {
     "hedera:*",
     new ExactHederaScheme({}),
   );
+}
+
+function hederaNetworkSlug(): "mainnet" | "testnet" {
+  return NETWORK === "hedera:mainnet" ? "mainnet" : "testnet";
+}
+
+function hederaExplorerUrl(accountId: string): string {
+  return `https://hashscan.io/${hederaNetworkSlug()}/account/${accountId}`;
+}
+
+function hederaTxExplorerUrl(transactionId: string): string {
+  return `https://hashscan.io/${hederaNetworkSlug()}/transaction/${transactionId}`;
+}
+
+function hederaMirrorBase(): string {
+  return NETWORK === "hedera:mainnet"
+    ? "https://mainnet.mirrornode.hedera.com"
+    : "https://testnet.mirrornode.hedera.com";
+}
+
+function usdcTokenId(): string {
+  return process.env.HEDERA_USDC_TOKEN_ID?.trim() || "0.0.429274";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Resolve the latest USDC CRYPTOTRANSFER into payTo — opens the tx page
+ * (no HashScan Summary / Transactions tab hunting).
+ */
+export async function resolveHederaSettleExplorerUrl(
+  payTo: string,
+  opts?: { agentId?: string; attempts?: number },
+): Promise<string> {
+  const agentId = opts?.agentId?.trim();
+  const attempts = opts?.attempts ?? 2;
+  const token = usdcTokenId();
+  const fallback = hederaExplorerUrl(payTo);
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const url = new URL(`${hederaMirrorBase()}/api/v1/transactions`);
+      url.searchParams.set("account.id", payTo);
+      url.searchParams.set("transactiontype", "CRYPTOTRANSFER");
+      url.searchParams.set("limit", "8");
+      url.searchParams.set("order", "desc");
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          transactions?: Array<{
+            transaction_id: string;
+            token_transfers?: Array<{
+              token_id: string;
+              account: string;
+              amount: number;
+            }>;
+          }>;
+        };
+        for (const tx of data.transactions ?? []) {
+          const transfers = tx.token_transfers ?? [];
+          const credit = transfers.find(
+            (t) =>
+              t.token_id === token &&
+              t.account === payTo &&
+              t.amount > 0,
+          );
+          if (!credit) continue;
+          if (agentId) {
+            const debit = transfers.find(
+              (t) =>
+                t.token_id === token &&
+                t.account === agentId &&
+                t.amount < 0,
+            );
+            if (!debit) continue;
+          }
+          return hederaTxExplorerUrl(tx.transaction_id);
+        }
+      }
+    } catch {
+      // mirror lag / transient — retry
+    }
+    await sleep(150);
+  }
+  return fallback;
 }
 
 /**
@@ -127,6 +222,13 @@ export function createPaymentMiddleware() {
         settled: true,
         rail: "hedera-x402",
         note: `Hedera ExactScheme via ${facilitatorUrl()}`,
+        facilitatorUrl: facilitatorUrl(),
+        facilitatorDocsUrl: "https://hashscan.io/testnet",
+        payTo: receiver,
+        explorerUrl: hederaExplorerUrl(receiver),
+        agentExplorerUrl: process.env.HEDERA_AGENT_ACCOUNT_ID?.trim()
+          ? hederaExplorerUrl(process.env.HEDERA_AGENT_ACCOUNT_ID.trim())
+          : undefined,
       } satisfies PaymentState);
       await next();
     });

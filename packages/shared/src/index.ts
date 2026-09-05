@@ -75,6 +75,11 @@ export interface AuditReport {
       settled: boolean;
       rail: "hedera-x402" | "arc-gateway" | "dev-bypass" | "none";
       note: string;
+      facilitatorUrl?: string;
+      facilitatorDocsUrl?: string;
+      payTo?: string;
+      explorerUrl?: string;
+      agentExplorerUrl?: string;
     };
   };
 }

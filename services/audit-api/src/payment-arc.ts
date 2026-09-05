@@ -52,15 +52,24 @@ function sellerAddress(): string | undefined {
   );
 }
 
+function gatewayFacilitatorUrl(): string {
+  return (
+    process.env.CIRCLE_GATEWAY_FACILITATOR_URL?.trim() ||
+    "https://gateway-api-testnet.circle.com"
+  );
+}
+
+function arcExplorerUrl(address: string): string {
+  return `https://testnet.arcscan.app/address/${address}`;
+}
+
 function bypassEnabled(): boolean {
   return process.env.DEV_BYPASS_PAYMENT !== "false";
 }
 
 function createArcResourceServer() {
   const facilitator = new BatchFacilitatorClient({
-    url:
-      process.env.CIRCLE_GATEWAY_FACILITATOR_URL ??
-      "https://gateway-api-testnet.circle.com",
+    url: gatewayFacilitatorUrl(),
   });
   return new x402ResourceServer(facilitator).register(
     "eip155:*",
@@ -132,6 +141,13 @@ export function createArcPaymentMiddleware() {
         settled: true,
         rail: "arc-gateway",
         note: `Circle Gateway nanopayment → ${payTo}`,
+        facilitatorUrl: gatewayFacilitatorUrl(),
+        facilitatorDocsUrl: "https://developers.circle.com/gateway",
+        payTo,
+        explorerUrl: arcExplorerUrl(payTo),
+        agentExplorerUrl: process.env.ARC_AGENT_ADDRESS?.trim()
+          ? arcExplorerUrl(process.env.ARC_AGENT_ADDRESS.trim())
+          : undefined,
       } satisfies PaymentState);
       await next();
     });
