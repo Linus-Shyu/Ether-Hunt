@@ -16,6 +16,16 @@ const LABELS: Record<string, string> = {
   "0x1111111254eeb25477b68fb85ed929f73a960582": "1inch Aggregation Router V5",
   "0xdef1c0ded9bec7f1a1670819833240f027b25eff": "0x Exchange Proxy",
   "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad": "Uniswap Universal Router (alt)",
+
+  // Lending / AMM cores.
+  "0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb": "Morpho Blue",
+  "0xba12222222228d8ba445958a75a0704d566bf2c8": "Balancer Vault",
+
+  // ERC-4626 vaults, names read from the contracts' own name() getter.
+  "0xbeef01735c132ada46aa9aa4c54623caa92a64cb": "Steakhouse USDC vault",
+  "0xbeeff047c03714965a54b671a37c18bef6b96210": "Waterline Reservoir USDC vault",
+  "0x9b5e92fd227876b4c07a8c02367e2cb23c639dfa": "Clearstar Yield USDC vault",
+  "0x5426178799ee0a0181a89b4f57efddfab49941ec": "Curve TricryptoINV pool",
 };
 
 export function shortAddress(address: string): string {
