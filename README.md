@@ -25,11 +25,54 @@ This is built for Classic judging priorities: **Technicality → Originality →
 
 | # | Partner | Track | How we qualify | How to verify |
 | --- | --- | --- | --- | --- |
-| 1 | **Hedera** | AI & Agentic Payments (x402 / Blocky402) | Live x402 gate on `POST /audit` via `ExactHederaScheme` + Blocky402 testnet; agent completes ≥1 real paid request | `DEV_BYPASS_PAYMENT=false` → unpaid `POST /audit` returns **402** → `npm run agent:scan` or UI **Hedera → Pay & hunt** → report `sources.payment.rail = hedera-x402` |
-| 2 | **The Graph** | Best AI Use Case — **From Scratch** | Own Studio subgraph `ether-hunt-approvals` that folds raw approvals into **live allowance state** (`Allowance` / `Account` / `Spender`) instead of mirroring logs; cite-only AI grounded on those rows | Set `GRAPH_SUBGRAPH_URL`; scan Dense USDC address; dossier shows **Graph LIVE**, the schema mode, and a **Copy subgraph query** button holding the exact GraphQL that ran |
-| 3 | **Arc** | Best Agentic Economy / Circle Agent Stack | `POST /audit/arc` Gateway nanopayments; Circle agent wallet pays via `circle services pay --chain ARC-TESTNET` | `npm run agent:arc` or UI **Arc → Pay & hunt** → `rail = arc-gateway` |
+| 1 | **Hedera** | AI & Agentic Payments (x402 / Blocky402) | Live x402 gate on `POST /audit` via `ExactHederaScheme` + Blocky402 testnet; agent completes ≥1 real paid request | Click [HashScan settle tx](https://hashscan.io/testnet/transaction/0.0.7162784@1788621320.334383663) or unpaid `POST /audit` → **402** → UI **Hedera → Pay & hunt** → `rail = hedera-x402` |
+| 2 | **The Graph** | Best AI Use Case — **From Scratch** | Own Studio subgraph `ether-hunt-approvals` that folds raw approvals into **live allowance state** (`Allowance` / `Account` / `Spender`) instead of mirroring logs; cite-only AI grounded on those rows | Set `GRAPH_SUBGRAPH_URL`; scan Case Files; dossier shows **Graph LIVE**, schema mode, and **Copy subgraph query** |
+| 3 | **Arc** | Best Agentic Economy / Circle Agent Stack | `POST /audit/arc` Gateway nanopayments; Circle agent wallet pays via `circle services pay --chain ARC-TESTNET` | Click [Arcscan agent](https://testnet.arcscan.app/address/0x810106009f15ba281d05467bf05adc05a87510ff) / [seller](https://testnet.arcscan.app/address/0x96Fa683C2Ca1CE3528F8bF88a48fAB79B011D2a7) or UI **Arc → Pay & hunt** → `rail = arc-gateway` |
 
-Judge packs (detail): [`docs/prize-checklist.md`](docs/prize-checklist.md) · [`docs/demo-script.md`](docs/demo-script.md) · [`docs/ai-attribution.md`](docs/ai-attribution.md)
+Judge packs (detail): [`docs/prize-checklist.md`](docs/prize-checklist.md) · [`docs/onchain-proofs.md`](docs/onchain-proofs.md) · [`docs/demo-script.md`](docs/demo-script.md) · [`docs/ai-attribution.md`](docs/ai-attribution.md)
+
+---
+
+## On-chain proofs (no install required)
+
+Async reviewers can verify both payment rails by clicking explorer links — full
+tables and ETHGlobal paste block live in [`docs/onchain-proofs.md`](docs/onchain-proofs.md).
+
+### Hedera x402 · testnet · $0.01 USDC
+
+Agent [`0.0.10363348`](https://hashscan.io/testnet/account/0.0.10363348) → payTo [`0.0.10363255`](https://hashscan.io/testnet/account/0.0.10363255) via Blocky402 ExactScheme.
+
+| | |
+| --- | --- |
+| **Settle tx (HashScan)** | https://hashscan.io/testnet/transaction/0.0.7162784@1788621320.334383663 |
+| **Mirror JSON** | https://testnet.mirrornode.hedera.com/api/v1/transactions/0.0.7162784-1788621320-334383663 |
+
+Token transfer on that tx: USDC `0.0.429274` · **+10000** to payTo · **−10000** from agent (`SUCCESS`).
+
+### Arc Agent Stack · `eip155:5042002` · $0.01 USDC
+
+`GatewayWalletBatched` settle into seller [`0x96Fa…D2a7`](https://testnet.arcscan.app/address/0x96Fa683C2Ca1CE3528F8bF88a48fAB79B011D2a7) from agent SCA [`0x8101…10ff`](https://testnet.arcscan.app/address/0x810106009f15ba281d05467bf05adc05a87510ff).
+
+| | |
+| --- | --- |
+| **Gateway payment id** | `39d15216-297d-4520-8b96-3a69561ccbfe` |
+| **Gateway payer** | https://testnet.arcscan.app/address/0x3dc9f3e18f7d9cea05f740f2152d06ba17a9a648 |
+| **Agent SCA** | https://testnet.arcscan.app/address/0x810106009f15ba281d05467bf05adc05a87510ff |
+| **Seller payTo** | https://testnet.arcscan.app/address/0x96Fa683C2Ca1CE3528F8bF88a48fAB79B011D2a7 |
+
+### Submission-form paste
+
+```text
+Hedera x402 (testnet) — $0.01 USDC ExactScheme via Blocky402
+Tx: https://hashscan.io/testnet/transaction/0.0.7162784@1788621320.334383663
+Agent: https://hashscan.io/testnet/account/0.0.10363348
+PayTo: https://hashscan.io/testnet/account/0.0.10363255
+
+Arc Agent Stack (eip155:5042002) — $0.01 USDC GatewayWalletBatched
+Gateway payment id: 39d15216-297d-4520-8b96-3a69561ccbfe
+Agent SCA: https://testnet.arcscan.app/address/0x810106009f15ba281d05467bf05adc05a87510ff
+Seller: https://testnet.arcscan.app/address/0x96Fa683C2Ca1CE3528F8bF88a48fAB79B011D2a7
+```
 
 ---
 
@@ -149,7 +192,8 @@ npm run dev:web   # http://localhost:5173
 
 | Variable | Purpose |
 | --- | --- |
-| `GRAPH_SUBGRAPH_URL` | Studio query URL for `ether-hunt-approvals` (**required** for Graph prize) |
+| `GRAPH_SUBGRAPH_URL` | Studio query URL for `ether-hunt-approvals` v0.0.2 (**required** for Graph prize) |
+| `GRAPH_SUBGRAPH_FALLBACK_URL` | Tip-synced prior deployment (default auto: `…/v0.0.1`) — Case File sync-fallback while v0.0.2 indexes |
 | `HEDERA_SERVICE_ACCOUNT_ID` / `HEDERA_AGENT_*` | x402 payTo + agent signer (ECDSA) |
 | `X402_PRICE='$0.01'` | Quote prices — shell expands bare `$0.01` incorrectly |
 | `ARC_SERVICE_ADDRESS` / `ARC_AGENT_ADDRESS` | Arc seller payTo + Circle agent wallet |
