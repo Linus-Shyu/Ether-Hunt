@@ -9,41 +9,41 @@ export type EvidenceBundle = {
   graphNote: string;
 };
 
-const TTL_MS = 45_000;
+const TTL_MS = 5 * 60_000;
 const cache = new Map<string, EvidenceBundle | Promise<EvidenceBundle>>();
 
 export async function gatherEvidence(address: string): Promise<EvidenceBundle> {
-  const [graph, profile] = await Promise.all([
-    fetchGraphEvidence(address),
-    fetchAddressProfile(address),
-  ]);
-
+  // Graph first — prize source. Do NOT Promise.all with RPC profile:
+  // eth_getCode / nonce often costs 10s+ and dominates paid-scan latency.
+  const graph = await fetchGraphEvidence(address);
   const graphHasSubjectApprovals = graph.evidence.some(
     (e) => e.kind === "approval" && !/network context/i.test(e.title),
   );
 
-  const rpc = graphHasSubjectApprovals
-    ? {
-        evidence: [] as EvidenceItem[],
-        note: "RPC skipped — live Graph already has subject approvals",
-      }
-    : await fetchRpcApprovalEvidence(address);
+  if (graphHasSubjectApprovals) {
+    return {
+      at: Date.now(),
+      graph,
+      evidence: graph.evidence,
+      graphNote: `${graph.note} | profile/RPC skipped — live Graph has subject approvals`,
+    };
+  }
 
-  const rpcUseful = rpc.evidence.filter(
-    (e) => e.id !== "rpc-empty" || !graphHasSubjectApprovals,
-  );
+  const [profile, rpc] = await Promise.all([
+    fetchAddressProfile(address),
+    fetchRpcApprovalEvidence(address),
+  ]);
+  const rpcUseful = rpc.evidence.filter((e) => e.id !== "rpc-empty");
 
   return {
     at: Date.now(),
     graph,
     evidence: [...graph.evidence, ...profile, ...rpcUseful],
-    graphNote: graphHasSubjectApprovals
-      ? `${graph.note} | ${rpc.note}`
-      : `${graph.note} | ${rpc.note}`,
+    graphNote: `${graph.note} | ${rpc.note}`,
   };
 }
 
-/** Kick off Graph/RPC while x402 settle runs so the paid handler can reuse it. */
+/** Kick off Graph while x402 settle runs (or earlier from /scan/warm). */
 export function warmEvidence(address: string): void {
   const key = address.toLowerCase();
   const hit = cache.get(key);
@@ -67,7 +67,7 @@ export async function takeEvidence(address: string): Promise<EvidenceBundle> {
   if (hit) {
     const bundle = hit instanceof Promise ? await hit : hit;
     if (Date.now() - bundle.at < TTL_MS) {
-      cache.delete(key);
+      // Keep cache for rapid re-scans / dual-rail demos.
       return bundle;
     }
     cache.delete(key);

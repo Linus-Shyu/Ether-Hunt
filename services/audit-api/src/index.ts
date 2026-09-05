@@ -152,6 +152,21 @@ async function runAudit(c: Context) {
 app.post("/audit", paymentGate, runAudit);
 app.post("/audit/arc", arcPaymentGate, runAudit);
 
+/** Prefetch Graph evidence before Pay & hunt (no payment). */
+app.post("/scan/warm", async (c) => {
+  const json = await c.req.json().catch(() => null);
+  const parsed = auditBody.safeParse(json);
+  if (!parsed.success) {
+    return c.json({ error: "invalid_body", details: parsed.error.flatten() }, 400);
+  }
+  const address = parsed.data.address.trim();
+  if (!isAddressLike(address)) {
+    return c.json({ error: "invalid_address" }, 400);
+  }
+  warmEvidence(address);
+  return c.json({ ok: true, warming: address.toLowerCase() });
+});
+
 /** Unpaid UI path — never counts as Hedera/Arc prize settle. */
 app.post("/scan/local", async (c) => {
   c.set("payment", {

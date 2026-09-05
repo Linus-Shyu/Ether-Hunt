@@ -116,6 +116,18 @@ export async function synthesizeWithAi(input: {
     };
   }
 
+  // Default: local cite-only analyst (fast). Set AUDIT_AI_MODE=llm for remote model.
+  const aiMode = (process.env.AUDIT_AI_MODE ?? "local").trim().toLowerCase();
+  if (aiMode !== "llm" && aiMode !== "remote") {
+    if (input.graphLive) {
+      const local = localGroundedNarrative(input);
+      return {
+        ...local,
+        note: `${local.note} · AUDIT_AI_MODE=${aiMode || "local"}`,
+      };
+    }
+  }
+
   if (!input.graphLive) {
     return {
       enabled: false,

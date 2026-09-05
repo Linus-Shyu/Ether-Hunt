@@ -23,8 +23,8 @@ async function rpcCall(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      timeoutMs: 18_000,
-      retries: 1,
+      timeoutMs: 4_000,
+      retries: 0,
     });
     if (!response.ok || response.error) {
       lastError = response.error ?? `HTTP ${response.status} @ ${rpc}`;
