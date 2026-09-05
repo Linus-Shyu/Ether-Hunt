@@ -77,8 +77,19 @@ function hederaExplorerUrl(accountId: string): string {
 }
 
 function hederaTxExplorerUrl(transactionId: string): string {
-  return `https://hashscan.io/${hederaNetworkSlug()}/transaction/${transactionId}`;
+  // Mirror returns `0.0.x-seconds-nanos`; HashScan prefers `0.0.x@seconds.nanos`.
+  const at = transactionId.includes("@")
+    ? transactionId
+    : (() => {
+        const parts = transactionId.split("-");
+        if (parts.length < 3) return transactionId;
+        const nanos = parts.pop()!;
+        const seconds = parts.pop()!;
+        return `${parts.join("-")}@${seconds}.${nanos}`;
+      })();
+  return `https://hashscan.io/${hederaNetworkSlug()}/transaction/${at}`;
 }
+
 
 function hederaMirrorBase(): string {
   return NETWORK === "hedera:mainnet"
