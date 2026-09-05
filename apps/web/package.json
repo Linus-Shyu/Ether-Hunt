@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@ether-hunt/shared": "*",
+    "@xyflow/react": "^12.11.6",
+    "d3-force": "^3.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
