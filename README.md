@@ -199,7 +199,7 @@ scripts/                    Hedera USDC associate helper
 
 Live Graph (example Studio deployment used in demos):
 
-`https://api.studio.thegraph.com/query/1758666/ether-hunt-approvals/v0.0.1`
+`https://api.studio.thegraph.com/query/1758666/ether-hunt-approvals/v0.0.2`
 
 ---
 
