@@ -1,6 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { AuditReport } from "@ether-hunt/shared";
+import { AllowanceGraph } from "./AllowanceGraph";
 import { downloadReportPdf } from "./reportPdf";
+import {
+  flowStepsFor,
+  gatedProbePath,
+  paidScanPath,
+  stepIndex,
+  type FlowStepId,
+  type PayRail,
+} from "./paymentFlow";
 import {
   copyShareText,
   nativeShare,
@@ -9,8 +18,6 @@ import {
 } from "./reportShare";
 
 const API = "/api";
-
-type PayRail = "local" | "hedera" | "arc";
 
 const DEMO_ADDRESSES = [
   {
@@ -55,31 +62,27 @@ const RAILS: { id: PayRail; label: string; hint: string }[] = [
   {
     id: "local",
     label: "Local",
-    hint: "Unpaid UI scan — not for prize demos",
+    hint: "Unpaid UI scan",
   },
   {
     id: "hedera",
     label: "Hedera x402",
-    hint: "Agent USDC via Blocky402",
+    hint: "Blocky402 USDC",
   },
   {
     id: "arc",
     label: "Arc Agent",
-    hint: "Circle Gateway nanopayment",
+    hint: "Circle Gateway",
   },
 ];
-
-function endpointFor(rail: PayRail) {
-  if (rail === "hedera") return `${API}/scan/hedera`;
-  if (rail === "arc") return `${API}/scan/arc`;
-  return `${API}/scan/local`;
-}
 
 function busyLabel(rail: PayRail) {
   if (rail === "hedera") return "Settling Hedera USDC…";
   if (rail === "arc") return "Paying Arc Gateway…";
   return "Hunting…";
 }
+
+type FlowPhase = "idle" | "running" | "done" | "error";
 
 export function App() {
   const [address, setAddress] = useState(DEMO_ADDRESSES[0].value);
@@ -89,6 +92,25 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AuditReport | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [flowPhase, setFlowPhase] = useState<FlowPhase>("idle");
+  const [activeStep, setActiveStep] = useState<FlowStepId>("request");
+  const [flowNote, setFlowNote] = useState<string | null>(null);
+  const [focusEvidenceId, setFocusEvidenceId] = useState<string | null>(null);
+
+  const steps = useMemo(() => flowStepsFor(rail), [rail]);
+  const activeIdx = stepIndex(steps, activeStep);
+  const progressPct =
+    flowPhase === "idle"
+      ? 0
+      : flowPhase === "done"
+        ? 100
+        : Math.min(96, ((activeIdx + 0.45) / steps.length) * 100);
+
+  useEffect(() => {
+    setFlowPhase("idle");
+    setActiveStep("request");
+    setFlowNote(null);
+  }, [rail]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,24 +133,102 @@ export function App() {
     setError(null);
     setReport(null);
     setShareNote(null);
-    try {
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-      };
+    setFlowPhase("running");
+    setFlowNote(null);
+    setActiveStep("request");
+    setFocusEvidenceId(null);
 
-      const response = await fetch(endpointFor(rail), {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ chainId: 1, address }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          payload.message ?? payload.error ?? `HTTP ${response.status}`,
+    const body = JSON.stringify({ chainId: 1, address });
+
+    try {
+      if (rail === "local") {
+        setActiveStep("scan");
+        setFlowNote("Unpaid local path — Graph + AI only");
+        const response = await fetch(`${API}/scan/local`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            payload.message ?? payload.error ?? `HTTP ${response.status}`,
+          );
+        }
+        setActiveStep("ready");
+        setFlowPhase("done");
+        setFlowNote("dev-bypass · not a prize settle");
+        setReport(payload as AuditReport);
+      } else {
+        setActiveStep("challenge");
+        if (bypassOn) {
+          setFlowNote(
+            "DEV_BYPASS_PAYMENT is on — no live 402 (turn off for prize demos)",
+          );
+          await new Promise((r) => setTimeout(r, 400));
+        } else {
+          setFlowNote("Probing gated endpoint for HTTP 402…");
+          const probe = await fetch(gatedProbePath(rail), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          });
+          if (probe.status === 402) {
+            setFlowNote("HTTP 402 Payment Required — agent will settle");
+            await new Promise((r) => setTimeout(r, 500));
+          } else if (probe.ok) {
+            setFlowNote(
+              "Gate returned 200 unexpectedly — continuing buyer path",
+            );
+            await new Promise((r) => setTimeout(r, 350));
+          } else {
+            const fail = await probe.json().catch(() => ({}));
+            throw new Error(
+              fail.message ?? fail.error ?? `Probe HTTP ${probe.status}`,
+            );
+          }
+        }
+
+        setActiveStep("settle");
+        setFlowNote(
+          rail === "hedera"
+            ? "Hedera agent signing USDC via Blocky402…"
+            : "Circle agent paying Arc Gateway…",
         );
+
+        const response = await fetch(paidScanPath(rail), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        });
+
+        setActiveStep("scan");
+        setFlowNote("Settlement path returned — assembling Graph dossier…");
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            payload.message ?? payload.error ?? `HTTP ${response.status}`,
+          );
+        }
+
+        const paid = payload as AuditReport;
+        setActiveStep("ready");
+        setFlowPhase("done");
+        setFlowNote(
+          `${paid.sources.payment.rail} · settled=${String(paid.sources.payment.settled)}`,
+        );
+        setReport(paid);
       }
-      setReport(payload as AuditReport);
+
+      requestAnimationFrame(() => {
+        document
+          .getElementById("dossier")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (err) {
+      setFlowPhase("error");
+      setFlowNote(err instanceof Error ? err.message : String(err));
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -142,124 +242,178 @@ export function App() {
   const medium =
     report?.findings.filter((f) => f.severity === "medium").length ?? 0;
 
-  const huntLabel =
-    rail === "local" ? "Hunt" : rail === "hedera" ? "Pay & hunt" : "Pay & hunt";
+  const huntLabel = rail === "local" ? "Begin hunt" : "Pay & hunt";
 
   return (
-    <div className="page">
-      <div className="grid-bg" aria-hidden="true" />
-      <div className="shell">
-        <header className="hero">
-          <div className="brand-row">
-            <img
-              className="brand-mark"
-              src="/logo-192.png"
-              width={56}
-              height={56}
-              alt=""
-            />
-            <div>
-              <p className="kicker">On-chain allowance hunt</p>
-              <h1 className="brand">Ether Hunt</h1>
-            </div>
-          </div>
-          <p className="tagline">
-            Live Graph evidence. Grounded AI findings. Pay-per-scan.
-          </p>
-          <p className="rail">
-            Hedera x402 <span>·</span> The Graph AI <span>·</span> Arc Agent
-            Stack
-          </p>
-        </header>
+    <div className={report ? "page has-report" : "page"}>
+      <div className="atmosphere" aria-hidden="true">
+        <img className="field" src="/hero-field.svg" alt="" />
+        <div className="scope-spin" />
+        <div className="mist" />
+      </div>
 
-        <fieldset className="pay-rails">
-          <legend>Payment rail</legend>
-          <div className="pay-options">
-            {RAILS.map((option) => (
-              <label
-                key={option.id}
-                className={
-                  rail === option.id ? "pay-option active" : "pay-option"
-                }
-              >
+      <section className="stage">
+        <div className="stage-inner">
+          <p className="brand-mark-line">
+            <img src="/logo-192.png" width={36} height={36} alt="" />
+            <span>ETHOnline 2026 · Classic</span>
+          </p>
+
+          <h1 className="brand">
+            <span className="brand-ether">Ether</span>
+            <span className="brand-hunt">Hunt</span>
+          </h1>
+
+          <p className="lede">
+            Trace live Graph approvals. Ground the AI. Settle the scan.
+          </p>
+
+          <form className="cta" onSubmit={onScan}>
+            <div
+              className="rail-tabs"
+              role="radiogroup"
+              aria-label="Payment rail"
+            >
+              {RAILS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={rail === option.id}
+                  className={rail === option.id ? "rail-tab active" : "rail-tab"}
+                  onClick={() => setRail(option.id)}
+                  title={option.hint}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="cta-row">
+              <label className="target">
+                <span>Target</span>
                 <input
-                  type="radio"
-                  name="pay-rail"
-                  value={option.id}
-                  checked={rail === option.id}
-                  onChange={() => setRail(option.id)}
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="0x…"
+                  spellCheck={false}
+                  autoComplete="off"
                 />
-                <span className="pay-label">{option.label}</span>
-                <span className="pay-hint">{option.hint}</span>
               </label>
+              <button className="hunt" type="submit" disabled={busy}>
+                {busy ? busyLabel(rail) : huntLabel}
+              </button>
+            </div>
+
+            {bypassOn && rail !== "local" ? (
+              <p className="cta-note warn">
+                DEV_BYPASS_PAYMENT is on — flip false for a real settle.
+              </p>
+            ) : null}
+            {rail === "local" ? (
+              <p className="cta-note">Local scans are unpaid (dev-bypass).</p>
+            ) : (
+              <p className="cta-note">
+                {RAILS.find((r) => r.id === rail)?.hint} · agent wallet on API
+                host
+              </p>
+            )}
+
+            {flowPhase !== "idle" ? (
+              <div
+                className={`pay-flow ${flowPhase} steps-${steps.length}`}
+                role="status"
+                aria-live="polite"
+              >
+                <div className="pay-flow-top">
+                  <span className="pay-flow-label">
+                    {rail === "local" ? "Scan progress" : "Payment progress"}
+                  </span>
+                  <span className="pay-flow-pct">
+                    {flowPhase === "error"
+                      ? "failed"
+                      : `${Math.round(progressPct)}%`}
+                  </span>
+                </div>
+                <div className="pay-track" aria-hidden="true">
+                  <div
+                    className="pay-fill"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <ol className="pay-steps">
+                  {steps.map((step, i) => {
+                    const state =
+                      flowPhase === "error" && i === activeIdx
+                        ? "error"
+                        : i < activeIdx || flowPhase === "done"
+                          ? "done"
+                          : i === activeIdx
+                            ? "active"
+                            : "todo";
+                    return (
+                      <li key={step.id} className={`pay-step ${state}`}>
+                        <span className="pay-step-dot" />
+                        <span className="pay-step-label">{step.label}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <p className="pay-flow-note">
+                  {flowNote ??
+                    steps[activeIdx]?.detail ??
+                    "Waiting for payment flow…"}
+                </p>
+              </div>
+            ) : null}
+          </form>
+        </div>
+      </section>
+
+      <section className="cases">
+        <div className="cases-inner">
+          <header>
+            <p className="section-label">Case files</p>
+            <h2>Known incident wallets</h2>
+            <p>
+              Public exploit addresses for quick demos. Dense USDC still yields
+              the richest Graph dossier.
+            </p>
+          </header>
+          <div className="presets">
+            {DEMO_ADDRESSES.map((preset) => (
+              <button
+                key={preset.value}
+                type="button"
+                className={
+                  address.toLowerCase() === preset.value.toLowerCase()
+                    ? "preset active"
+                    : "preset"
+                }
+                onClick={() => {
+                  setAddress(preset.value);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                {preset.label}
+              </button>
             ))}
           </div>
-          {bypassOn && rail !== "local" ? (
-            <p className="pay-warn">
-              Global DEV_BYPASS_PAYMENT is on — Hedera/Arc will not truly settle
-              until you set it to false and restart the API.
-            </p>
-          ) : null}
-          {rail === "local" ? (
-            <p className="pay-hint-inline">
-              Local is always unpaid (`dev-bypass`). Prize settles use Hedera or
-              Arc.
-            </p>
-          ) : null}
-        </fieldset>
-
-        <form className="scan" onSubmit={onScan}>
-          <label className="field">
-            <span>Target address</span>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="0x…"
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </label>
-          <button className="hunt" type="submit" disabled={busy}>
-            {busy ? busyLabel(rail) : huntLabel}
-          </button>
-        </form>
-
-        <div className="presets">
-          {DEMO_ADDRESSES.map((preset) => (
-            <button
-              key={preset.value}
-              type="button"
-              className={
-                address.toLowerCase() === preset.value.toLowerCase()
-                  ? "preset active"
-                  : "preset"
-              }
-              onClick={() => setAddress(preset.value)}
-            >
-              {preset.label}
-            </button>
-          ))}
         </div>
+      </section>
 
+      <div className="shell status-shell">
         {error ? <p className="status error">{error}</p> : null}
-        {!error && !report && !busy ? (
-          <p className="status">
-            Incident wallets below are public Etherscan-tagged exploit
-            addresses. Dense USDC still gives the richest Graph dossier for
-            demos.
-          </p>
-        ) : null}
-        {busy ? (
-          <p className="status hunting" role="status">
-            {rail === "local"
-              ? "Tracing approvals across Graph evidence…"
-              : `${busyLabel(rail)} then grounding the dossier…`}
-          </p>
-        ) : null}
+      </div>
 
-        {report ? (
-          <section className="dossier">
+      {report ? (
+        <section className="dossier" id="dossier">
+          <div className="dossier-inner">
+            <div className="dossier-stamp" aria-hidden="true">
+              {report.sources.graph.live ? "GRAPH LIVE" : "GRAPH OFF"}
+            </div>
+
             <div className="dossier-head">
               <div>
                 <p className="section-label">Dossier</p>
@@ -313,7 +467,9 @@ export function App() {
                 onClick={() => {
                   try {
                     downloadReportPdf(report);
-                    setShareNote("PDF downloaded.");
+                    setShareNote(
+                      "Print dialog opened — choose Save as PDF.",
+                    );
                   } catch (err) {
                     setShareNote(
                       err instanceof Error ? err.message : "PDF export failed",
@@ -381,6 +537,19 @@ export function App() {
               </article>
             ) : null}
 
+            <AllowanceGraph
+              address={report.address}
+              evidence={report.evidence}
+              onSelect={(id) => {
+                setFocusEvidenceId(id);
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById(`evidence-${id}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                });
+              }}
+            />
+
             <div className="split">
               <section>
                 <p className="section-label">Findings</p>
@@ -406,7 +575,13 @@ export function App() {
                 <p className="section-label">Evidence ledger</p>
                 <div className="evidence">
                   {report.evidence.map((e) => (
-                    <article key={e.id}>
+                    <article
+                      key={e.id}
+                      id={`evidence-${e.id}`}
+                      className={
+                        focusEvidenceId === e.id ? "evidence-focus" : undefined
+                      }
+                    >
                       <header>
                         <span className="kind">{e.kind}</span>
                         <h4>{e.title}</h4>
@@ -431,9 +606,14 @@ export function App() {
             </div>
 
             <p className="graph-note">{report.sources.graph.note}</p>
-          </section>
-        ) : null}
-      </div>
+          </div>
+        </section>
+      ) : null}
+
+      <footer className="site-foot">
+        <span>Ether Hunt</span>
+        <span>Hedera x402 · The Graph · Arc Agent Stack</span>
+      </footer>
     </div>
   );
 }
