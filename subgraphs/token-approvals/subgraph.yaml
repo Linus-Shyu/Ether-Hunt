@@ -16,6 +16,9 @@ dataSources:
       language: wasm/assemblyscript
       entities:
         - ApprovalEvent
+        - Allowance
+        - Account
+        - Spender
       abis:
         - name: ERC20
           file: ./abis/ERC20.json

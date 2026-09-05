@@ -1,3 +1,9 @@
+"""
+One raw ERC-20 Approval log, classified at index time.
+
+`unlimited` and `revoke` are computed in the mapping so consumers never have to
+re-derive risk semantics from a value string.
+"""
 type ApprovalEvent @entity(immutable: true) {
   id: ID!
   token: Bytes!
@@ -7,4 +13,80 @@ type ApprovalEvent @entity(immutable: true) {
   blockNumber: BigInt!
   timestamp: BigInt!
   transactionHash: Bytes!
+
+  unlimited: Boolean!
+  revoke: Boolean!
+  """Allowance state this log mutated."""
+  allowance: Allowance!
+}
+
+"""
+Current allowance state for one (token, owner, spender) triple.
+
+This is the entity risk actually depends on: an owner who granted an unlimited
+approval and never revoked it is still exposed, no matter how old the log is.
+Reconstructing that from an event list requires replaying every log per pair,
+so the mapping folds it here instead.
+"""
+type Allowance @entity(immutable: false) {
+  "token-owner-spender"
+  id: ID!
+  token: Bytes!
+  owner: Account!
+  spender: Spender!
+
+  currentValue: BigInt!
+  """True while the live allowance is effectively infinite."""
+  unlimited: Boolean!
+  """True while the live allowance is zero."""
+  revoked: Boolean!
+  """Highest allowance ever granted on this pair."""
+  peakValue: BigInt!
+
+  approvalCount: Int!
+  revokeCount: Int!
+  firstSeen: BigInt!
+  lastSeen: BigInt!
+  lastTransactionHash: Bytes!
+
+  events: [ApprovalEvent!]! @derivedFrom(field: "allowance")
+}
+
+"""An address in its owner role — what it has exposed."""
+type Account @entity(immutable: false) {
+  "address"
+  id: ID!
+
+  approvalCount: Int!
+  """Unlimited approvals ever granted, including ones later revoked."""
+  unlimitedGrantCount: Int!
+  """Unlimited approvals still live right now — the standing exposure."""
+  liveUnlimitedCount: Int!
+  revokeCount: Int!
+  """Distinct (token, spender) pairs this owner has approved."""
+  distinctSpenderPairs: Int!
+
+  firstSeen: BigInt!
+  lastSeen: BigInt!
+
+  allowances: [Allowance!]! @derivedFrom(field: "owner")
+}
+
+"""An address in its spender role — the privileged-operator surface."""
+type Spender @entity(immutable: false) {
+  "address"
+  id: ID!
+
+  approvalCount: Int!
+  """Unlimited approvals ever received."""
+  unlimitedReceivedCount: Int!
+  """Unlimited approvals still live right now."""
+  liveUnlimitedCount: Int!
+  """Distinct (token, owner) pairs that approved this spender."""
+  distinctOwnerPairs: Int!
+
+  firstSeen: BigInt!
+  lastSeen: BigInt!
+
+  allowancesReceived: [Allowance!]! @derivedFrom(field: "spender")
 }
