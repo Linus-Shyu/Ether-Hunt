@@ -33,6 +33,28 @@ Judge packs (detail): [`docs/prize-checklist.md`](docs/prize-checklist.md) · [`
 
 ---
 
+## Verify it yourself in 60 seconds
+
+The UI is built so no claim has to be taken on trust:
+
+1. **Prove the gate.** In the hero, press **Prove the gate**. The browser sends one
+   *unpaid* request to the gated endpoint and renders the raw HTTP `402` challenge
+   decoded from the `payment-required` header — scheme, network, price, asset,
+   `payTo`. Hedera shows `exact` on `hedera:testnet`; Arc shows
+   `GatewayWalletBatched` on `eip155:5042002`.
+2. **Pay & hunt.** The agent settles $0.01 USDC, then the scan runs. The
+   **Verifiable rails** panel flips the matching card to `PROVEN` and links the
+   settlement — HashScan transfer tx for Hedera, agent wallet for Arc.
+3. **Check the grounding.** The Graph card shows the live endpoint, the number of
+   real `ApprovalEvent` rows cited, and a **Copy subgraph query** button holding
+   the exact GraphQL the API ran. Every finding lists its cite count.
+4. **Confirm it is useful.** The dossier ranks revocable spenders and links each
+   one out to revoke.cash, so the audit ends in an action rather than a verdict.
+5. **Confirm it is honest.** Scan `vitalik.eth` from **Case files** — the exposure
+   gauge stays low, which is how you know the high scores mean something.
+
+---
+
 ## Architecture
 
 ```
@@ -61,7 +83,10 @@ Judge packs (detail): [`docs/prize-checklist.md`](docs/prize-checklist.md) · [`
 3. Retry / paid buyer path returns **200** + dossier.  
 4. Report records `sources.payment.rail` ∈ `hedera-x402` | `arc-gateway` | `dev-bypass`.
 
-Web UI shows a **payment progress** strip: Request → 402 → Settle → Hunt → Paid.
+Web UI shows a **payment progress** strip: Request → 402 → Settle → Hunt → Paid,
+plus a **Prove the gate** control that renders the decoded 402 challenge without
+paying, and a **Verifiable rails** panel that links each partner's settlement
+artefact once it exists.
 
 Local rail uses `POST /scan/local` (**unpaid / `dev-bypass`**) — for UI only, **not** a prize payment proof.
 
@@ -120,7 +145,12 @@ curl -i -X POST http://127.0.0.1:8787/audit \
 ## Repo layout
 
 ```
-apps/web                    Vite + React (brand UI, pay progress, graph, PDF)
+apps/web/src/App.tsx            State + payment orchestration only
+apps/web/src/components/        TerminalHeader · ScanConsole · ChallengeViewer
+                                ProofRail · CaseFiles · Dossier · RiskMeter
+                                AllowanceGraph (React Flow + d3-force)
+apps/web/src/lib/               api (402 decode) · risk (score, revocations)
+                                paymentFlow · reportPdf · reportShare · graphQuery
 services/audit-api          Hono: dual payment + Graph + detectors + AI
 packages/agent-consumer     Hedera + Arc paying agents (CLI + libs for web proxy)
 packages/shared             AuditReport / evidence types
