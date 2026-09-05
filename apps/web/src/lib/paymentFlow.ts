@@ -19,25 +19,25 @@ export function flowStepsFor(rail: PayRail): FlowStep[] {
       {
         id: "request",
         label: "Request",
-        detail: "Open unpaid local scan",
+        detail: "Open unpaid local scan channel",
       },
       {
         id: "scan",
         label: "Hunt",
-        detail: "Graph evidence + grounded AI",
+        detail: "Querying Graph ApprovalEvent + grounded AI",
       },
       {
         id: "ready",
         label: "Dossier",
-        detail: "Report ready (dev-bypass)",
+        detail: "Report sealed (dev-bypass · unpaid)",
       },
     ];
   }
 
   const settleDetail =
     rail === "hedera"
-      ? "Agent signs ExactHederaScheme via Blocky402"
-      : "Circle agent pays Gateway nanopayment";
+      ? "Settling USDC via Hedera ExactScheme / Blocky402"
+      : "Settling nanopayment via Circle Gateway / Arc";
 
   return [
     {
@@ -48,7 +48,7 @@ export function flowStepsFor(rail: PayRail): FlowStep[] {
     {
       id: "challenge",
       label: "402",
-      detail: "Payment required — no report yet",
+      detail: "Payment required — report gated",
     },
     {
       id: "settle",
@@ -58,7 +58,7 @@ export function flowStepsFor(rail: PayRail): FlowStep[] {
     {
       id: "scan",
       label: "Hunt",
-      detail: "Graph evidence + grounded AI",
+      detail: "Querying Graph Subgraph ApprovalEvent…",
     },
     {
       id: "ready",
