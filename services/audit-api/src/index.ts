@@ -131,6 +131,8 @@ async function runAudit(c: Context) {
         live: graph.live,
         endpoint: graph.endpoint,
         note: graphNote,
+        mode: graph.stats.mode,
+        query: graph.query,
       },
       payment: {
         required: payment.required,

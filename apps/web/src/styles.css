@@ -1667,6 +1667,13 @@ input {
   border-color: #000;
 }
 
+.proof-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  border-color: var(--color-border);
+}
+
 @media (max-width: 900px) {
   .proof-cards {
     grid-template-columns: 1fr;

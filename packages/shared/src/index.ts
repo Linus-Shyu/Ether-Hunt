@@ -92,6 +92,10 @@ export interface AuditReport {
       live: boolean;
       endpoint?: string;
       note: string;
+      /** Which subgraph schema the endpoint answered on. */
+      mode?: "allowance-state" | "approval-events";
+      /** The exact GraphQL this scan ran, so a reviewer can replay it. */
+      query?: string;
     };
     payment: {
       required: boolean;

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { AuditReport } from "@ether-hunt/shared";
 import type { Health } from "../lib/api";
-import { APPROVAL_EVENTS_QUERY } from "../lib/graphQuery";
 import { countGraphRows } from "../lib/risk";
 
 type Props = {
@@ -73,10 +72,14 @@ export function ProofRail({ health, report }: Props) {
       : "off";
 
   const graphEvidence = report ? countGraphRows(report) : 0;
+  // The query the scan actually ran — the deployed schema decides which one,
+  // so copying a hardcoded constant could hand a reviewer something that fails.
+  const graphQuery = report?.sources.graph.query;
 
   function copyQuery() {
+    if (!graphQuery) return;
     void navigator.clipboard
-      .writeText(APPROVAL_EVENTS_QUERY)
+      .writeText(graphQuery)
       .then(() => setCopied(true))
       .catch(() => setCopied(false));
     window.setTimeout(() => setCopied(false), 1800);
@@ -139,12 +142,23 @@ export function ProofRail({ health, report }: Props) {
               <StateBadge state={graphState} />
             </header>
             <p className="proof-claim">
-              Every finding cites an indexed <code>ApprovalEvent</code>. The AI
-              layer may only summarise these rows — it cannot invent evidence.
+              Our subgraph folds raw approvals into live{" "}
+              <code>Allowance</code> state, so findings cite what is still
+              spendable — not just what was once signed. The AI layer may only
+              summarise these rows; it cannot invent evidence.
             </p>
             <div className="proof-rows">
               <Row k="endpoint" v={endpointHost(report?.sources.graph.endpoint)} />
-              <Row k="entity" v="approvalEvents" />
+              <Row
+                k="schema"
+                v={
+                  report?.sources.graph.mode === "allowance-state"
+                    ? "allowance state"
+                    : report
+                      ? "approval events"
+                      : undefined
+                }
+              />
               <Row
                 k="cited"
                 v={report ? `${graphEvidence} Graph rows` : undefined}
@@ -159,7 +173,12 @@ export function ProofRail({ health, report }: Props) {
               />
             </div>
             <div className="proof-actions">
-              <button type="button" className="proof-link" onClick={copyQuery}>
+              <button
+                type="button"
+                className="proof-link"
+                onClick={copyQuery}
+                disabled={!graphQuery}
+              >
                 {copied ? "Query copied" : "Copy subgraph query"}
               </button>
               {report?.sources.graph.endpoint ? (

@@ -129,6 +129,8 @@ export interface GraphFetchResult {
   live: boolean;
   endpoint?: string;
   note: string;
+  /** The exact GraphQL this call ran — surfaced in the UI for replay. */
+  query?: string;
   evidence: EvidenceItem[];
   stats: {
     mode: GraphMode;
@@ -604,6 +606,7 @@ export async function fetchGraphEvidence(
           live: true,
           endpoint,
           note: `Live Graph OK (allowance-state) — allowances=${built.stats.asOwner}, asSpender=${built.stats.asSpender}, liveUnlimited=${built.stats.liveUnlimited}.`,
+          query: ALLOWANCE_STATE_QUERY.trim(),
           ...built,
         };
       }
@@ -711,6 +714,7 @@ export async function fetchGraphEvidence(
       live: true,
       endpoint,
       note: `Live Graph OK (approval-events — deploy v0.0.2 for allowance state) — owner=${built.stats.asOwner}, spender=${built.stats.asSpender}, context≈${built.stats.contextUnlimited}.`,
+      query: APPROVAL_EVENTS_QUERY.trim(),
       ...built,
     };
   } catch (error) {
