@@ -7,6 +7,7 @@
 | `services/audit-api/src/payment-arc.ts` Circle Gateway | Cursor + `@circle-fin/x402-batching` | Arc Agent Stack buyer path via Circle CLI |
 | `subgraphs/token-approvals` | Cursor | Schema choice, Studio deploy, live URL |
 | `services/audit-api/src/synthesize.ts` Graph-grounded LLM | Cursor | Prompt constraints (cite-only), prize narrative |
+| Web pay progress, allowance graph, PDF print | Cursor | Demo UX for payment + Graph WOW |
 | Detectors / UX copy | Cursor + human | Severity taxonomy, known spender labels, demo script |
 
 Notes:
