@@ -4,7 +4,6 @@ import { AllowanceGraph } from "./AllowanceGraph";
 import { downloadReportPdf } from "./reportPdf";
 import {
   flowStepsFor,
-  gatedProbePath,
   paidScanPath,
   stepIndex,
   type FlowStepId,
@@ -160,34 +159,14 @@ export function App() {
         setFlowNote("dev-bypass · not a prize settle");
         setReport(payload as AuditReport);
       } else {
+        // Visual 402 beat only — a live unpaid POST probe doubles latency.
+        // Prove the gate once in demo via curl; paid path goes straight to settle.
         setActiveStep("challenge");
-        if (bypassOn) {
-          setFlowNote(
-            "DEV_BYPASS_PAYMENT is on — no live 402 (turn off for prize demos)",
-          );
-          await new Promise((r) => setTimeout(r, 400));
-        } else {
-          setFlowNote("Probing gated endpoint for HTTP 402…");
-          const probe = await fetch(gatedProbePath(rail), {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body,
-          });
-          if (probe.status === 402) {
-            setFlowNote("HTTP 402 Payment Required — agent will settle");
-            await new Promise((r) => setTimeout(r, 500));
-          } else if (probe.ok) {
-            setFlowNote(
-              "Gate returned 200 unexpectedly — continuing buyer path",
-            );
-            await new Promise((r) => setTimeout(r, 350));
-          } else {
-            const fail = await probe.json().catch(() => ({}));
-            throw new Error(
-              fail.message ?? fail.error ?? `Probe HTTP ${probe.status}`,
-            );
-          }
-        }
+        setFlowNote(
+          bypassOn
+            ? "DEV_BYPASS_PAYMENT is on — skipping live 402 (turn off for prize demos)"
+            : "x402 gate armed — unpaid calls return 402; agent will settle now",
+        );
 
         setActiveStep("settle");
         setFlowNote(
@@ -196,14 +175,32 @@ export function App() {
             : "Circle agent paying Arc Gateway…",
         );
 
-        const response = await fetch(paidScanPath(rail), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        });
+        const settleStarted = Date.now();
+        const settleTick = window.setInterval(() => {
+          const sec = Math.round((Date.now() - settleStarted) / 1000);
+          if (sec >= 3) {
+            setActiveStep("scan");
+            setFlowNote(
+              rail === "hedera"
+                ? `Still settling / hunting… ${sec}s (Blocky402 + Graph + AI)`
+                : `Still settling / hunting… ${sec}s (Gateway + Graph + AI)`,
+            );
+          }
+        }, 1000);
+
+        let response: Response;
+        try {
+          response = await fetch(paidScanPath(rail), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          });
+        } finally {
+          window.clearInterval(settleTick);
+        }
 
         setActiveStep("scan");
-        setFlowNote("Settlement path returned — assembling Graph dossier…");
+        setFlowNote("Payment path returned — finalizing dossier…");
 
         const payload = await response.json();
         if (!response.ok) {
@@ -216,9 +213,19 @@ export function App() {
         setActiveStep("ready");
         setFlowPhase("done");
         setFlowNote(
-          `${paid.sources.payment.rail} · settled=${String(paid.sources.payment.settled)}`,
+          `${paid.sources.payment.rail} · settled=${String(paid.sources.payment.settled)} · ${Math.round((Date.now() - settleStarted) / 1000)}s`,
         );
         setReport(paid);
+        // Open settle proof immediately (Arc → agent; Hedera → settle tx / payTo).
+        const settleProof =
+          paid.sources.payment.rail === "arc-gateway"
+            ? paid.sources.payment.agentExplorerUrl ||
+              paid.sources.payment.explorerUrl
+            : paid.sources.payment.explorerUrl ||
+              paid.sources.payment.agentExplorerUrl;
+        if (settleProof) {
+          window.open(settleProof, "_blank", "noopener,noreferrer");
+        }
       }
 
       requestAnimationFrame(() => {
@@ -460,6 +467,78 @@ export function App() {
               </div>
             </div>
 
+            {report.sources.payment.facilitatorDocsUrl ||
+            report.sources.payment.explorerUrl ||
+            report.sources.payment.agentExplorerUrl ? (
+              <div className="pay-links">
+                <span className="section-label">Settle links</span>
+                <div className="pay-link-row">
+                  {report.sources.payment.rail === "arc-gateway" &&
+                  report.sources.payment.agentExplorerUrl ? (
+                    <a
+                      href={report.sources.payment.agentExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Agent explorer
+                    </a>
+                  ) : null}
+                  {report.sources.payment.payTo &&
+                  report.sources.payment.explorerUrl ? (
+                    <a
+                      className="pay-to-link"
+                      href={report.sources.payment.explorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {report.sources.payment.explorerUrl.includes(
+                        "/transaction/",
+                      )
+                        ? `Settle tx → ${report.sources.payment.payTo}`
+                        : `payTo ${report.sources.payment.payTo}`}
+                    </a>
+                  ) : report.sources.payment.payTo ? (
+                    <code className="pay-to">
+                      payTo {report.sources.payment.payTo}
+                    </code>
+                  ) : report.sources.payment.explorerUrl ? (
+                    <a
+                      href={report.sources.payment.explorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      PayTo explorer
+                    </a>
+                  ) : null}
+                  {report.sources.payment.rail !== "arc-gateway" &&
+                  report.sources.payment.agentExplorerUrl ? (
+                    <a
+                      href={report.sources.payment.agentExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Agent explorer
+                    </a>
+                  ) : null}
+                  {report.sources.payment.facilitatorDocsUrl ? (
+                    <a
+                      href={report.sources.payment.facilitatorDocsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Facilitator docs
+                    </a>
+                  ) : null}
+                </div>
+                <p className="pay-link-note">
+                  {report.sources.payment.note}
+                  {report.sources.payment.facilitatorUrl
+                    ? ` · API ${report.sources.payment.facilitatorUrl}`
+                    : ""}
+                </p>
+              </div>
+            ) : null}
+
             <div className="dossier-actions">
               <button
                 type="button"
@@ -543,9 +622,16 @@ export function App() {
               onSelect={(id) => {
                 setFocusEvidenceId(id);
                 requestAnimationFrame(() => {
-                  document
-                    .getElementById(`evidence-${id}`)
-                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                  const finding = report.findings.find((f) =>
+                    f.evidenceIds.includes(id),
+                  );
+                  const target = finding
+                    ? document.getElementById(`finding-${finding.id}`)
+                    : document.getElementById(`evidence-${id}`);
+                  target?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "nearest",
+                  });
                 });
               }}
             />
@@ -555,7 +641,16 @@ export function App() {
                 <p className="section-label">Findings</p>
                 <div className="findings">
                   {report.findings.map((f) => (
-                    <article className={`finding sev-${f.severity}`} key={f.id}>
+                    <article
+                      className={
+                        focusEvidenceId &&
+                        f.evidenceIds.includes(focusEvidenceId)
+                          ? `finding sev-${f.severity} finding-focus`
+                          : `finding sev-${f.severity}`
+                      }
+                      key={f.id}
+                      id={`finding-${f.id}`}
+                    >
                       <header>
                         <h3>{f.title}</h3>
                         <span className={`sev ${f.severity}`}>{f.severity}</span>

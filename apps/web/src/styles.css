@@ -975,6 +975,54 @@ input {
   padding-bottom: 0.85rem;
 }
 
+.finding.finding-focus {
+  border-left-width: 4px;
+  background: rgba(194, 79, 29, 0.06);
+  padding: 0.55rem 0.75rem 0.55rem 0.9rem;
+  border-radius: 2px;
+  outline: 1.5px solid rgba(194, 79, 29, 0.45);
+}
+
+.pay-links {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.15rem 0 0.35rem;
+}
+
+.pay-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: center;
+}
+
+.pay-link-row a {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--signal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pay-link-row .pay-to-link {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.pay-link-row .pay-to {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.pay-link-note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .evidence header {
   display: flex;
   gap: 0.55rem;
