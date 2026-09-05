@@ -217,8 +217,8 @@ export async function fetchGraphEvidence(
         query: APPROVAL_EVENTS_QUERY,
         variables: { owner },
       }),
-      timeoutMs: 25_000,
-      retries: 3,
+      timeoutMs: 12_000,
+      retries: 1,
     });
 
     if (!response.ok) {

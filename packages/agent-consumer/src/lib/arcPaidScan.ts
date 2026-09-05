@@ -10,6 +10,11 @@ export type CircleResult = {
   stderr: string;
 };
 
+/** Skip deposit/balance probes for this long after a successful pay or OK balance. */
+const GATEWAY_OK_TTL_MS = 20 * 60 * 1000;
+let gatewayOkUntil =
+  process.env.ARC_ASSUME_GATEWAY_OK === "false" ? 0 : Date.now() + GATEWAY_OK_TTL_MS;
+
 function runCircle(args: string[]): Promise<CircleResult> {
   return new Promise((resolve) => {
     const child = spawn("circle", args, {
@@ -43,6 +48,23 @@ function parseJson(text: string): unknown {
   }
 }
 
+function markGatewayOk(): void {
+  gatewayOkUntil = Date.now() + GATEWAY_OK_TTL_MS;
+}
+
+function gatewayRecentlyOk(): boolean {
+  return Date.now() < gatewayOkUntil;
+}
+
+function looksLikeFundingError(text: string): boolean {
+  return /insufficient|deposit|balance|underfund|not enough|funding/i.test(
+    text,
+  );
+}
+
+/**
+ * Balance/deposit only — no `wallet status` (that alone can cost many seconds).
+ */
 export async function ensureArcGatewayDeposit(opts?: {
   address?: string;
   chain?: string;
@@ -54,13 +76,6 @@ export async function ensureArcGatewayDeposit(opts?: {
     "0x810106009f15ba281d05467bf05adc05a87510ff";
   const chain = opts?.chain?.trim() || process.env.ARC_CHAIN?.trim() || "ARC-TESTNET";
   const min = opts?.minUsdc ?? 0.05;
-
-  const status = await runCircle(["wallet", "status", "--output", "json"]);
-  if (status.status !== 0) {
-    throw new Error(
-      `Circle CLI not ready: ${status.stderr || status.stdout || "wallet status failed"}`,
-    );
-  }
 
   const gw = await runCircle([
     "gateway",
@@ -76,7 +91,10 @@ export async function ensureArcGatewayDeposit(opts?: {
 
   const parsed = parseJson(gw.stdout) as { data?: { total?: string } } | null;
   const total = Number(parsed?.data?.total ?? 0);
-  if (total >= min) return;
+  if (total >= min) {
+    markGatewayOk();
+    return;
+  }
 
   const deposit = await runCircle([
     "gateway",
@@ -97,6 +115,36 @@ export async function ensureArcGatewayDeposit(opts?: {
       `Gateway deposit failed: ${deposit.stderr || deposit.stdout || "unknown"}`,
     );
   }
+  markGatewayOk();
+}
+
+function payArgs(opts: {
+  api: string;
+  agentAddress: string;
+  chain: string;
+  body: string;
+  maxAmount: string;
+}): string[] {
+  return [
+    "services",
+    "pay",
+    `${opts.api}/audit/arc`,
+    "--address",
+    opts.agentAddress,
+    "--chain",
+    opts.chain,
+    "-X",
+    "POST",
+    "--data",
+    opts.body,
+    "--max-amount",
+    opts.maxAmount,
+    // Settle + audit; keep headroom but avoid hanging forever.
+    "--timeout",
+    process.env.ARC_PAY_TIMEOUT_SECONDS?.trim() || "90",
+    "--output",
+    "json",
+  ];
 }
 
 export async function arcPaidScan(opts: {
@@ -118,31 +166,30 @@ export async function arcPaidScan(opts: {
     "0x810106009f15ba281d05467bf05adc05a87510ff";
   const chain =
     opts.chain?.trim() || process.env.ARC_CHAIN?.trim() || "ARC-TESTNET";
-
-  await ensureArcGatewayDeposit({ address: agentAddress, chain });
-
+  const maxAmount = opts.maxAmount ?? "0.05";
   const body = JSON.stringify({
     chainId: opts.chainId ?? 1,
     address: opts.address,
   });
 
-  const pay = await runCircle([
-    "services",
-    "pay",
-    `${api}/audit/arc`,
-    "--address",
-    agentAddress,
-    "--chain",
-    chain,
-    "-X",
-    "POST",
-    "--data",
-    body,
-    "--max-amount",
-    opts.maxAmount ?? "0.05",
-    "--output",
-    "json",
-  ]);
+  const forceEnsure = process.env.ARC_FORCE_GATEWAY_ENSURE === "true";
+  // Default: skip slow balance/deposit probes when Gateway was OK recently.
+  if (forceEnsure || !gatewayRecentlyOk()) {
+    if (process.env.ARC_SKIP_GATEWAY_ENSURE !== "true") {
+      await ensureArcGatewayDeposit({ address: agentAddress, chain });
+    }
+  }
+
+  const args = payArgs({ api, agentAddress, chain, body, maxAmount });
+  let pay = await runCircle(args);
+
+  if (
+    pay.status !== 0 &&
+    looksLikeFundingError(`${pay.stderr}\n${pay.stdout}`)
+  ) {
+    await ensureArcGatewayDeposit({ address: agentAddress, chain, minUsdc: 0.05 });
+    pay = await runCircle(args);
+  }
 
   if (pay.status !== 0) {
     return {
@@ -154,6 +201,8 @@ export async function arcPaidScan(opts: {
       raw: pay.stdout || pay.stderr,
     };
   }
+
+  markGatewayOk();
 
   const parsed = parseJson(pay.stdout) as {
     data?: { response?: unknown; statusCode?: number };

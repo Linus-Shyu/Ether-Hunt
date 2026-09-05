@@ -191,13 +191,14 @@ Rules:
       body: JSON.stringify({
         model,
         temperature: 0.2,
+        max_tokens: 700,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
       }),
-      timeoutMs: 60_000,
-      retries: 1,
+      timeoutMs: 8_000,
+      retries: 0,
     });
     if (!response.ok || response.error) {
       // Proxy tokens go stale often — keep a cite-only local analyst so Graph AI path still demos.
@@ -234,13 +235,13 @@ Rules:
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1200,
+        max_tokens: 700,
         temperature: 0.2,
         system,
         messages: [{ role: "user", content: user }],
       }),
-      timeoutMs: 60_000,
-      retries: 1,
+      timeoutMs: 8_000,
+      retries: 0,
     });
     if (!response.ok || response.error) {
       const local = localGroundedNarrative(input);

@@ -9,12 +9,14 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { isAddressLike, type AuditReport } from "@ether-hunt/shared";
 import { analyzeEvidence, summarizeFindings } from "./analyze.js";
-import { fetchGraphEvidence } from "./graph.js";
 import { hederaPaidScan } from "@ether-hunt/agent-consumer/hedera";
 import { arcPaidScan } from "@ether-hunt/agent-consumer/arc";
-import { createPaymentMiddleware } from "./payment.js";
+import {
+  createPaymentMiddleware,
+  resolveHederaSettleExplorerUrl,
+} from "./payment.js";
 import { createArcPaymentMiddleware } from "./payment-arc.js";
-import { fetchRpcApprovalEvidence, fetchAddressProfile } from "./rpcEvidence.js";
+import { takeEvidence, warmEvidence } from "./evidenceGather.js";
 import { synthesizeWithAi } from "./synthesize.js";
 
 
@@ -92,22 +94,9 @@ async function runAudit(c: Context) {
     return c.json({ error: "invalid_address" }, 400);
   }
 
-  const graph = await fetchGraphEvidence(address);
-  const profile = await fetchAddressProfile(address);
-  const rpc = await fetchRpcApprovalEvidence(address);
-
-  const graphHasSubjectApprovals = graph.evidence.some(
-    (e) => e.kind === "approval" && !/network context/i.test(e.title),
-  );
-  const rpcUseful = rpc.evidence.filter(
-    (e) => e.id !== "rpc-empty" || !graphHasSubjectApprovals,
-  );
-
-  // Always keep live Graph evidence first (prize source), then profile + RPC supplement.
-  const evidence = [...graph.evidence, ...profile, ...rpcUseful];
-  const graphNote = graphHasSubjectApprovals
-    ? `${graph.note} | RPC supplement skipped empty window`
-    : `${graph.note} | ${rpc.note}`;
+  // Prefer warm cache filled while x402 settle was in flight (web paid scans).
+  const bundle = await takeEvidence(address);
+  const { graph, evidence, graphNote } = bundle;
 
   const ruleFindings = analyzeEvidence(evidence);
   const ai = await synthesizeWithAi({
@@ -148,6 +137,11 @@ async function runAudit(c: Context) {
         settled: payment.settled,
         rail: payment.rail,
         note: payment.note,
+        facilitatorUrl: payment.facilitatorUrl,
+        facilitatorDocsUrl: payment.facilitatorDocsUrl,
+        payTo: payment.payTo,
+        explorerUrl: payment.explorerUrl,
+        agentExplorerUrl: payment.agentExplorerUrl,
       },
     },
   };
@@ -188,13 +182,27 @@ app.post("/scan/hedera", async (c) => {
   const apiUrl =
     process.env.AUDIT_API_URL?.trim() || `http://127.0.0.1:${port}`;
 
+  // Overlap Graph/RPC with Blocky402 settle so paid /audit is mostly AI.
+  warmEvidence(address);
+
   try {
     const { status, body } = await hederaPaidScan({
       apiUrl,
       address,
       chainId: parsed.data.chainId,
     });
-    if (status >= 200 && status < 300) return c.json(body);
+    if (status >= 200 && status < 300) {
+      const report = body as AuditReport;
+      const payTo = report.sources?.payment?.payTo;
+      if (payTo) {
+        report.sources.payment.explorerUrl =
+          await resolveHederaSettleExplorerUrl(payTo, {
+            agentId: process.env.HEDERA_AGENT_ACCOUNT_ID,
+            attempts: 2,
+          });
+      }
+      return c.json(report);
+    }
     return c.json(body, status as 400);
   } catch (err) {
     return c.json(
@@ -221,6 +229,8 @@ app.post("/scan/arc", async (c) => {
   const port = Number(process.env.PORT ?? 8787);
   const apiUrl =
     process.env.AUDIT_API_URL?.trim() || `http://127.0.0.1:${port}`;
+
+  warmEvidence(address);
 
   try {
     const { status, body } = await arcPaidScan({
