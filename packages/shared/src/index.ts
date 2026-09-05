@@ -9,6 +9,26 @@ export type EvidenceKind =
   | "code"
   | "other";
 
+/**
+ * Aggregates the subgraph computed at index time. Present only when the
+ * deployed subgraph exposes allowance state; detectors must degrade gracefully
+ * without them.
+ */
+export interface EvidenceMetrics {
+  /** Live allowance in token minor units. */
+  currentValue?: string;
+  /** Highest allowance ever granted on this pair. */
+  peakValue?: string;
+  /** How many times this owner→spender pair was re-approved. */
+  approvalCount?: number;
+  /** Unlimited allowances this spender still holds, across all owners. */
+  spenderLiveUnlimited?: number;
+  /** Distinct (token, owner) pairs that approved this spender. */
+  spenderDistinctOwners?: number;
+  /** Unlimited allowances the subject still has outstanding. */
+  ownerLiveUnlimited?: number;
+}
+
 export interface EvidenceItem {
   id: string;
   kind: EvidenceKind;
@@ -25,9 +45,12 @@ export interface EvidenceItem {
     owner?: string;
     spender?: string;
     unlimited?: boolean;
+    /** Allowance is currently zero — exposure already closed. */
+    revoked?: boolean;
     tokenLabel?: string;
     role?: "owner" | "spender" | "context";
   };
+  metrics?: EvidenceMetrics;
 }
 
 export interface Finding {
