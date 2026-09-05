@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useEffect, useRef, type FormEvent } from "react";
 import type { ChallengeProbe } from "../lib/api";
 import type { FlowStep, PayRail } from "../lib/paymentFlow";
 import { ChallengeViewer } from "./ChallengeViewer";
@@ -61,6 +61,13 @@ export function ScanConsole({
   onProbeDismiss,
 }: Props) {
   const huntLabel = rail === "local" ? "Begin hunt" : "Pay & hunt";
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logs]);
 
   return (
     <section className="hero">
@@ -167,7 +174,7 @@ export function ScanConsole({
                   );
                 })}
               </ol>
-              <div className="terminal-log">
+              <div className="terminal-log" ref={logRef}>
                 {logs.map((line, i) => (
                   <p key={`${i}-${line.slice(0, 24)}`}>{line}</p>
                 ))}

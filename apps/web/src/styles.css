@@ -534,15 +534,19 @@ input {
 
 .terminal-log {
   margin: 0;
-  padding: 0.55rem 0.65rem;
-  max-height: 8rem;
-  overflow: hidden;
+  padding: 0.55rem 0.65rem 0.7rem;
+  max-height: 11.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.35);
   font-family: var(--font-mono);
   font-size: 0.68rem;
   line-height: 1.45;
   color: rgba(255, 255, 255, 0.8);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
 }
 
 .terminal-log p {
@@ -554,6 +558,7 @@ input {
 
 .terminal-log p:last-child {
   color: #00a651;
+  padding-bottom: 0.1rem;
 }
 
 .pay-flow-note {

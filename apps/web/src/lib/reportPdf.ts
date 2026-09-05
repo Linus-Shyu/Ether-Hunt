@@ -373,14 +373,20 @@ function buildReportHtml(report: AuditReport) {
  * Opens a brand-styled dossier print sheet.
  * Use the system dialog → "Save as PDF" for a typeset export
  * (matches site fonts; avoids Helvetica Unicode breakage).
+ *
+ * Uses a Blob URL instead of `document.write` into `window.open("", …)`.
+ * With `noopener`, browsers leave that blank window as `about:blank` and
+ * block scripted writes from the opener.
  */
 export function downloadReportPdf(report: AuditReport) {
   const html = buildReportHtml(report);
-  const win = window.open("", "_blank", "noopener,noreferrer");
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "noopener,noreferrer");
   if (!win) {
+    URL.revokeObjectURL(url);
     throw new Error("Pop-up blocked — allow pop-ups to export the PDF dossier.");
   }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  // Keep the blob alive long enough for the tab to load + print.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
