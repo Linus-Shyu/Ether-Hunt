@@ -43,3 +43,6 @@ tmp/
 
 # TypeScript
 *.tsbuildinfo
+
+# Python
+__pycache__/
