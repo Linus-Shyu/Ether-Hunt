@@ -19,6 +19,15 @@ export interface EvidenceItem {
   /** Raw Graph entity id or tx hash */
   ref?: string;
   occurredAt?: string;
+  /** Optional graph edges for allowance relationship viz */
+  links?: {
+    token?: string;
+    owner?: string;
+    spender?: string;
+    unlimited?: boolean;
+    tokenLabel?: string;
+    role?: "owner" | "spender" | "context";
+  };
 }
 
 export interface Finding {

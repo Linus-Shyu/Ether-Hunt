@@ -162,6 +162,14 @@ function rowToEvidence(
       ? `https://etherscan.io/tx/${a.transactionHash}`
       : undefined,
     occurredAt: when,
+    links: {
+      token: a.token.toLowerCase(),
+      owner: a.owner.toLowerCase(),
+      spender: a.spender.toLowerCase(),
+      unlimited,
+      tokenLabel: "USDC",
+      role,
+    },
   };
 }
 
