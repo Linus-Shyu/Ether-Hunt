@@ -309,4 +309,4 @@ Full table: [`docs/ai-attribution.md`](docs/ai-attribution.md).
 | Web pay progress + one-click Hedera/Arc | Done |
 | Allowance relationship graph | Done |
 | PDF / share dossier | Done |
-| Submission demo video ≤4 min | **TODO** |
+| Submission demo video ≤4 min | Done |
