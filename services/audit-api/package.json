@@ -14,13 +14,13 @@
     "@ether-hunt/shared": "*",
     "@hashgraph/sdk": "^2.81.0",
     "@hono/node-server": "^1.19.0",
-    "@x402/core": "^2.25.0",
-    "@x402/evm": "^2.25.0",
-    "@x402/hedera": "^2.25.0",
-    "@x402/hono": "^2.25.0",
+    "@x402/core": "^2.29.0",
+    "@x402/evm": "^2.29.0",
+    "@x402/hedera": "^2.29.0",
+    "@x402/hono": "^2.29.0",
     "dotenv": "^16.4.5",
     "hono": "^4.9.6",
-    "zod": "^4.1.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
