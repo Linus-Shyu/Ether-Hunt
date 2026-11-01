@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@ether-hunt/shared": "*",
-    "@x402/fetch": "^2.25.0",
-    "@x402/hedera": "^2.2.1",
+    "@x402/fetch": "^2.29.0",
+    "@x402/hedera": "^2.29.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
